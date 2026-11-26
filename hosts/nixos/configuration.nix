@@ -120,6 +120,7 @@
   services.openssh.enable = true;
   services.openssh.settings.PasswordAuthentication = true;
   services.tailscale.enable = true;
+  services.tailscale.openFirewall = true;
 
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
@@ -158,6 +159,7 @@
   environment.systemPackages = with pkgs; [
     git
     htop
+    btop
   ];
   services.nixos-autoupdate.enable = true;
   programs.mosh.enable = true; # also opens UDP 60000-61000
