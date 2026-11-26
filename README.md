@@ -1,9 +1,9 @@
-# labs: NixOS configuration for host `nixos`
+# labs: NixOS configuration for host `labs-ghuntley-com`
 
 This repo holds the whole system configuration for this machine as a flake. devenv provides the tooling around it.
 
 ```
-flake.nix                         nixosConfigurations.nixos (nixpkgs pinned in flake.lock)
+flake.nix                         nixosConfigurations.labs-ghuntley-com (nixpkgs pinned in flake.lock)
 hosts/nixos/configuration.nix     main config (was /etc/nixos/configuration.nix)
 hosts/nixos/hardware-configuration.nix
 modules/auto-update.nix           pull-based auto-deploy (systemd timer)
@@ -31,7 +31,7 @@ Normally you just commit and push to `trunk`. The machine deploys the change its
 
 1. Fetches `trunk` from `https://github.com/ghuntley/labs.git` into `/var/lib/nixos-config`.
 2. Exits if that revision is already running (`nixos-version --configuration-revision`) or was already attempted (`/var/lib/nixos-autoupdate/last-attempt`). A broken commit is therefore tried once, not every minute. Push a fix to move on.
-3. Otherwise runs `nixos-rebuild switch --flake /var/lib/nixos-config#nixos`.
+3. Otherwise runs `nixos-rebuild switch --flake /var/lib/nixos-config#labs-ghuntley-com`.
 
 To see the logs, run `journalctl -u nixos-autoupdate -f`.
 
@@ -48,7 +48,7 @@ After a rollback, the next new commit on `trunk` is still deployed. To stop auto
 ## Bootstrap (already done once)
 
 ```
-sudo nixos-rebuild switch --flake .#nixos --option experimental-features 'nix-command flakes'
+sudo nixos-rebuild switch --flake .#labs-ghuntley-com --option experimental-features 'nix-command flakes'
 ```
 
 `/etc/nixos` is no longer used. It is kept only as a historical fallback.

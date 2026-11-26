@@ -14,13 +14,13 @@
 
   scripts = {
     nixos-build.exec = ''
-      nixos-rebuild build --flake "$DEVENV_ROOT#nixos" "$@"
+      nixos-rebuild build --flake "$DEVENV_ROOT#labs-ghuntley-com" "$@"
     '';
     nixos-diff.exec = ''
-      cd "$DEVENV_ROOT" && nixos-rebuild build --flake ".#nixos" && nvd diff /run/current-system ./result
+      cd "$DEVENV_ROOT" && nixos-rebuild build --flake ".#labs-ghuntley-com" && nvd diff /run/current-system ./result
     '';
     nixos-switch.exec = ''
-      sudo nixos-rebuild switch --flake "$DEVENV_ROOT#nixos" "$@"
+      sudo nixos-rebuild switch --flake "$DEVENV_ROOT#labs-ghuntley-com" "$@"
     '';
     nixos-update.exec = ''
       cd "$DEVENV_ROOT" && nix flake update "$@"

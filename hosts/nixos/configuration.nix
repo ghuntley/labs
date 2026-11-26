@@ -16,7 +16,7 @@
   boot.loader.grub.device = "/dev/sda";
   boot.loader.grub.useOSProber = true;
 
-  networking.hostName = "nixos"; # Define your hostname.
+  networking.hostName = "labs-ghuntley-com"; # Define your hostname.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
   # Configure network proxy if necessary
@@ -78,6 +78,7 @@
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users."ghuntley" = {
     isNormalUser = true;
+    linger = true; # keep user services running without a login session
     description = "ghuntley";
     extraGroups = [
       "networkmanager"
@@ -118,7 +119,8 @@
   programs.nix-ld.enable = true;
 
   services.openssh.enable = true;
-  services.openssh.settings.PasswordAuthentication = true;
+  services.openssh.settings.PasswordAuthentication = false;
+  services.openssh.settings.KbdInteractiveAuthentication = false;
   services.tailscale.enable = true;
   services.tailscale.openFirewall = true;
 
@@ -163,6 +165,12 @@
   ];
   services.nixos-autoupdate.enable = true;
   programs.mosh.enable = true; # also opens UDP 60000-61000
+  programs.neovim = {
+    enable = true;
+    defaultEditor = true;
+    viAlias = true;
+    vimAlias = true;
+  };
 
   system.stateVersion = "26.05"; # Did you read the comment?
 
