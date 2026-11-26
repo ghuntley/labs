@@ -155,7 +155,10 @@
     "flakes"
   ];
   security.sudo.wheelNeedsPassword = false;
-  environment.systemPackages = with pkgs; [ git ];
+  environment.systemPackages = with pkgs; [
+    git
+    htop
+  ];
   services.nixos-autoupdate.enable = true;
   programs.mosh.enable = true; # also opens UDP 60000-61000
 
