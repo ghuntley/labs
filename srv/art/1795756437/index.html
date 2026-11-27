@@ -509,7 +509,7 @@ var ArtLogic = (function () {
     '}',
 
     'void main() {',
-    '  vec2 fragCoord = gl_FragCoord.xy',
+    '  vec2 fragCoord = gl_FragCoord.xy;',
     '  vec2 uv = (fragCoord - 0.5 * uRes) / min(uRes.y, uRes.x);',
     '  vec2 uvn = fragCoord / uRes;',
     '  float kick = uBass * uReact;',
