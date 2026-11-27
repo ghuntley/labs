@@ -6,7 +6,7 @@ This repo holds the whole system configuration for this machine as a flake. deve
 flake.nix                         nixosConfigurations.labs-ghuntley-com (nixpkgs pinned in flake.lock)
 hosts/nixos/configuration.nix     main config (was /etc/nixos/configuration.nix)
 hosts/nixos/hardware-configuration.nix
-modules/auto-update.nix           pull-based auto-deploy (systemd timer)
+nixos/modules/auto-update.nix     pull-based auto-deploy (systemd timer)
 devenv.nix                        dev shell: scripts, formatter, git hooks
 ```
 

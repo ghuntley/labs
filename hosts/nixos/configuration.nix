@@ -8,7 +8,7 @@
   imports = [
     # Include the results of the hardware scan.
     ./hardware-configuration.nix
-    ../../modules/auto-update.nix
+    ../../nixos/modules/auto-update.nix
   ];
 
   # Use the GRUB 2 boot loader.
