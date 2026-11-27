@@ -69,6 +69,27 @@ in
           --time-limit 2m "$@" "http://localhost:8765/surf/?demo=8" "$spec"
       done
     '';
+    # Unit tests, then Bombadil against the same local server layout as
+    # serve-surf (srv/ at /, so /art/ and /art/<epoch>/ work). Extra args
+    # go to bombadil. Exit 2 = property violation.
+    test-art.exec = ''
+      set -eu
+      cd "$DEVENV_ROOT"
+      node --test tests/art/*.test.mjs
+      piece=$(find srv/art -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' | sort | tail -n1)
+      piece=''${piece#srv}
+      node tests/surf/serve.mjs 8766 & server=$!
+      trap 'kill $server' EXIT
+      sleep 1
+      echo "== bombadil tests/art/index.spec.ts"
+      bombadil browser test --headless --no-sandbox --exit-on-violation         --time-limit 30s "$@" "http://localhost:8766/art/" tests/art/index.spec.ts
+      echo "== bombadil tests/art/site.spec.ts"
+      bombadil browser test --headless --no-sandbox --exit-on-violation         --time-limit 30s "$@" "http://localhost:8766/" tests/art/site.spec.ts
+      echo "== bombadil tests/art/spec.ts"
+      bombadil browser test --headless --no-sandbox --exit-on-violation         --time-limit 2m "$@" "http://localhost:8766''${piece}/" tests/art/spec.ts
+      echo "== bombadil tests/art/controls.spec.ts"
+      bombadil browser test --headless --no-sandbox --exit-on-violation         --time-limit 2m "$@" "http://localhost:8766''${piece}/" tests/art/controls.spec.ts
+    '';
   };
 
   git-hooks.hooks.nixfmt.enable = true;

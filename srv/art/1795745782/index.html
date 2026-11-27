@@ -1,0 +1,1306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05070a">
+  <title>thin film — labs.ghuntley.com</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --fg: #e9ffe8;
+      --muted: #8aa896;
+      --accent: #c6ff3a;
+      --accent2: #67f0ff;
+      --accent3: #ff4ae0;
+      --gold: #ffd36a;
+      --bg: rgba(5, 8, 10, 0.78);
+      --line: rgba(198, 255, 58, 0.38);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #05070a;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--fg);
+      -webkit-font-smoothing: antialiased;
+    }
+    #c {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    #hint {
+      position: fixed;
+      left: 50%;
+      bottom: 1.4rem;
+      transform: translateX(-50%);
+      z-index: 4;
+      padding: 0.45rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+    #hint[hidden], #gl-error:empty { display: none; }
+    #gl-error {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 5;
+      max-height: 40vh;
+      overflow: auto;
+      padding: 0.7rem 0.9rem;
+      background: rgba(40, 0, 10, 0.9);
+      border: 1px solid var(--accent3);
+      border-radius: 8px;
+      color: #ffd0ea;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+    #hud {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 3;
+      width: min(20.5rem, calc(100vw - 24px));
+      padding: 10px 12px 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(103, 240, 255, 0.08), 0 16px 50px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      font-size: 11px;
+      line-height: 1.35;
+      user-select: none;
+    }
+    #hud.collapsed {
+      width: auto;
+      padding: 6px 8px;
+    }
+    #hud.collapsed .hud-body { display: none; }
+    .hud-top {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-height: 1.4rem;
+    }
+    .hud-top strong {
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: lowercase;
+      color: var(--accent);
+    }
+    .hud-top a {
+      color: var(--accent2);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    .hud-top a:hover { border-bottom-color: var(--accent2); }
+    #fps, #audio-state {
+      color: var(--muted);
+      margin-left: auto;
+      font-variant-numeric: tabular-nums;
+    }
+    #hud.collapsed #fps { margin-left: 0.4rem; }
+    #hud-toggle {
+      appearance: none;
+      margin-left: 0.2rem;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    #hud-toggle:hover, button:hover, #audio-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .hud-body { margin-top: 0.75rem; }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0.32rem 0;
+    }
+    .row label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      min-width: 0;
+    }
+    .row label > span, .lbl {
+      flex: 0 0 7.2rem;
+      color: var(--muted);
+    }
+    .row input[type="range"] {
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--accent);
+    }
+    .row input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 3px 6px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--fg);
+      font: inherit;
+    }
+    button, #audio-toggle, #seed-random, #fullscreen {
+      appearance: none;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: rgba(198, 255, 58, 0.06);
+      color: var(--fg);
+      font: inherit;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #audio-toggle {
+      flex: 1;
+      background: rgba(103, 240, 255, 0.08);
+    }
+    #audio-toggle[aria-pressed="true"] {
+      background: rgba(198, 255, 58, 0.16);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .section {
+      margin: 0.7rem 0 0.25rem;
+      color: var(--accent2);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 9px;
+    }
+    #spectrum {
+      display: block;
+      width: 100%;
+      height: 36px;
+      margin: 0.45rem 0 0.2rem;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.4);
+    }
+    .keys {
+      margin: 0.55rem 0 0;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+    }
+    .val {
+      flex: 0 0 2.4rem;
+      text-align: right;
+      color: var(--fg);
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body data-ready="0" data-renderer="" data-seed="" data-audio="off" data-hud="open" data-fps="0" data-bass="0" data-mid="0" data-high="0" data-beat="0" data-gl-error="">
+  <canvas id="c" tabindex="-1"></canvas>
+  <div id="hint">click or press space to start the synth</div>
+  <pre id="gl-error" hidden></pre>
+  <aside id="hud" aria-label="Controls">
+    <div class="hud-top">
+      <strong>thin film</strong>
+      <a id="back" href="/art/">art</a>
+      <span id="fps" aria-live="off">0 fps</span>
+      <button id="hud-toggle" type="button" title="Toggle controls (H)" aria-expanded="true" aria-controls="hud-body">hide</button>
+    </div>
+    <div id="hud-body" class="hud-body">
+      <div class="section">audio</div>
+      <div class="row">
+        <button id="audio-toggle" type="button" aria-pressed="false">Start Synth</button>
+        <button id="fullscreen" type="button" title="Fullscreen (F)">full</button>
+      </div>
+      <div class="row">
+        <label><span>Volume</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="volume-val">0.72</i></label>
+      </div>
+      <div class="row">
+        <label><span>BPM</span><input id="bpm" type="range" min="80" max="180" step="1" value="132"><i class="val" id="bpm-val">132</i></label>
+      </div>
+      <div class="row">
+        <label><span>Acid cutoff</span><input id="cutoff" type="range" min="0" max="1" step="0.01" value="0.42"><i class="val" id="cutoff-val">0.42</i></label>
+      </div>
+      <div class="row">
+        <label><span>Resonance</span><input id="resonance" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="resonance-val">0.72</i></label>
+      </div>
+      <div class="section">seed</div>
+      <div class="row">
+        <label><span>Seed</span><input id="seed" type="text" spellcheck="false" autocomplete="off" inputmode="text"></label>
+        <button id="seed-random" type="button" title="Randomize seed (R)">Randomize</button>
+      </div>
+      <div class="section">shader</div>
+      <div class="row">
+        <label><span>Speed</span><input id="speed" type="range" min="0.1" max="3" step="0.01" value="1"><i class="val" id="speed-val">1.00</i></label>
+      </div>
+      <div class="row">
+        <label><span>Warp</span><input id="warp" type="range" min="0" max="2" step="0.01" value="0.72"><i class="val" id="warp-val">0.72</i></label>
+      </div>
+      <div class="row">
+        <label><span>Iridescence</span><input id="irid" type="range" min="0" max="2" step="0.01" value="0.85"><i class="val" id="irid-val">0.85</i></label>
+      </div>
+      <div class="row">
+        <label><span>Reactivity</span><input id="react" type="range" min="0" max="2" step="0.01" value="0.8"><i class="val" id="react-val">0.80</i></label>
+      </div>
+      <div class="row">
+        <label><span>Chromatic</span><input id="glitch" type="range" min="0" max="2" step="0.01" value="0.28"><i class="val" id="glitch-val">0.28</i></label>
+      </div>
+      <canvas id="spectrum" width="320" height="36" aria-label="Audio spectrum"></canvas>
+      <p class="keys">H hud · Space audio · R seed · F fullscreen</p>
+    </div>
+  </aside>
+  <script id="art-logic">
+var ArtLogic = (function () {
+  "use strict";
+
+  function clamp(v, a, b) {
+    v = Number(v);
+    if (Number.isNaN(v)) return a;
+    return v < a ? a : v > b ? b : v;
+  }
+
+  function hash32(str) {
+    var h = 2166136261;
+    str = String(str);
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function parseSeed(input) {
+    var s = String(input == null ? "" : input).trim();
+    if (!s) return { ok: false, display: "", value: 0 };
+    if (/^0x[0-9a-f]+$/i.test(s)) {
+      return { ok: true, display: s, value: parseInt(s, 16) >>> 0 };
+    }
+    if (/^\d+$/.test(s)) {
+      var v = s.length > 15 ? hash32(s) : Number(s) >>> 0;
+      return { ok: true, display: s, value: v };
+    }
+    return { ok: true, display: s, value: hash32(s) };
+  }
+
+  function randomSeed(rng) {
+    var v = (Math.random() * 0x100000000) >>> 0;
+    if (!rng && typeof crypto !== "undefined" && crypto.getRandomValues) {
+      var buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      v = buf[0] >>> 0;
+    } else if (typeof rng === "function") {
+      v = rng() >>> 0;
+    }
+    if (v === 0) v = 1;
+    return { ok: true, display: String(v), value: v };
+  }
+
+  function readSeedFromLocation(loc) {
+    loc = loc || { hash: "", search: "" };
+    var hash = String(loc.hash || "").replace(/^#/, "");
+    var params = new URLSearchParams(hash);
+    if (!params.has("seed")) {
+      params = new URLSearchParams(String(loc.search || "").replace(/^\?/, ""));
+    }
+    if (!params.has("seed")) return null;
+    return parseSeed(params.get("seed"));
+  }
+
+  function seedHashString(display) {
+    return "#seed=" + encodeURIComponent(String(display));
+  }
+
+  function mulberry32(a) {
+    a = a >>> 0;
+    return function () {
+      var t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function buildAcidPattern(seed) {
+    seed = seed >>> 0;
+    var rand = mulberry32(seed);
+    var root = 28 + (seed % 12);
+    var scales = [
+      [0, 0, 3, 5, 7, 7, 10, 12],
+      [0, 2, 3, 5, 7, 8, 12, 15],
+      [0, 3, 5, 6, 7, 10, 12, 15]
+    ];
+    var scale = scales[seed % 3];
+    var steps = [];
+    var i, r, rest, note, accent, slide;
+    for (i = 0; i < 16; i++) {
+      r = rand();
+      rest = r < 0.12;
+      note = root + scale[Math.floor(rand() * scale.length)] + (rand() < 0.18 ? 12 : 0);
+      accent = rand() < 0.28;
+      slide = !rest && rand() < 0.2;
+      steps.push({ rest: rest, note: note, accent: accent, slide: slide });
+    }
+    steps[0].rest = false;
+    return { root: root, steps: steps };
+  }
+
+  function midiToFreq(m) {
+    return 440 * Math.pow(2, (m - 69) / 12);
+  }
+
+  return {
+    clamp: clamp,
+    hash32: hash32,
+    parseSeed: parseSeed,
+    randomSeed: randomSeed,
+    readSeedFromLocation: readSeedFromLocation,
+    seedHashString: seedHashString,
+    mulberry32: mulberry32,
+    buildAcidPattern: buildAcidPattern,
+    midiToFreq: midiToFreq
+  };
+})();
+  </script>
+
+  <script id="art-main">
+(function () {
+  "use strict";
+
+  var L = ArtLogic;
+  var canvas = document.getElementById("c");
+  var hud = document.getElementById("hud");
+  var hudBody = document.getElementById("hud-body");
+  var hudToggle = document.getElementById("hud-toggle");
+  var audioToggle = document.getElementById("audio-toggle");
+  var hint = document.getElementById("hint");
+  var glError = document.getElementById("gl-error");
+  var fpsEl = document.getElementById("fps");
+  var seedInput = document.getElementById("seed");
+  var specCanvas = document.getElementById("spectrum");
+  var specCtx = specCanvas.getContext("2d");
+
+  var sliders = {
+    volume: document.getElementById("volume"),
+    bpm: document.getElementById("bpm"),
+    cutoff: document.getElementById("cutoff"),
+    resonance: document.getElementById("resonance"),
+    speed: document.getElementById("speed"),
+    warp: document.getElementById("warp"),
+    irid: document.getElementById("irid"),
+    react: document.getElementById("react"),
+    glitch: document.getElementById("glitch")
+  };
+
+  var seedState = { display: "1", value: 1 };
+  var hudOpen = true;
+  var audioOn = false;
+  var mouse = [0, 0];
+  var mouseT = [0, 0];
+  var startMs = performance.now();
+  var lastMs = startMs;
+  var fpsSmoothed = 0;
+  var visual = { bass: 0, mid: 0, high: 0, beat: 0 };
+
+  var FS_SOURCE = [
+    "precision highp float;",
+    "uniform vec2 uRes;",
+    "uniform float uTime, uBeat, uBass, uMid, uHigh;",
+    "uniform float uSeed, uSpeed, uWarp, uIrid, uReact, uGlitch;",
+    "uniform vec2 uMouse;",
+    "uniform sampler2D uFreq;",
+    "",
+    "const float PI = 3.14159265359;",
+    "const float TAU = 6.28318530718;",
+    "",
+    "float hash11(float n) {",
+    "  return fract(sin(n + uSeed * 0.00013) * 43758.5453123);",
+    "}",
+    "float hash21(vec2 p) {",
+    "  return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 0.00011) * 43758.5453);",
+    "}",
+    "float noise(vec2 p) {",
+    "  vec2 i = floor(p);",
+    "  vec2 f = fract(p);",
+    "  f = f * f * (3.0 - 2.0 * f);",
+    "  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),",
+    "             mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);",
+    "}",
+    "float fbm(vec2 p) {",
+    "  float a = 0.0;",
+    "  float b = 0.5;",
+    "  for (int i = 0; i < 4; i++) {",
+    "    a += b * noise(p);",
+    "    p = p * 2.07 + 13.17;",
+    "    b *= 0.5;",
+    "  }",
+    "  return a;",
+    "}",
+    "mat2 rot(float a) {",
+    "  float c = cos(a), s = sin(a);",
+    "  return mat2(c, s, -s, c);",
+    "}",
+    "float sdTorus(vec3 p, vec2 t) {",
+    "  vec2 q = vec2(length(p.xz) - t.x, p.y);",
+    "  return length(q) - t.y;",
+    "}",
+    "float sdOcta(vec3 p, float s) {",
+    "  p = abs(p);",
+    "  return (p.x + p.y + p.z - s) * 0.57735027;",
+    "}",
+    "vec3 pal(float t) {",
+    "  vec3 a = vec3(0.50, 0.47, 0.50);",
+    "  vec3 b = vec3(0.50, 0.52, 0.45);",
+    "  vec3 c = vec3(1.00, 0.92, 0.80);",
+    "  vec3 d = vec3(0.00, 0.33, 0.67);",
+    "  return a + b * cos(TAU * (c * t + d + uIrid * 0.15));",
+    "}",
+    "",
+    "float gMat;",
+    "float map(vec3 p) {",
+    "  float t = uTime * uSpeed;",
+    "  float react = uReact;",
+    "  float bass = uBass * react;",
+    "  float md = uMid * react;",
+    "  float hi = uHigh * react;",
+    "  p.z += t * (2.15 + bass * 1.35);",
+    "  p.xy += uMouse * 0.38;",
+    "  p.xy *= rot(p.z * 0.065 + t * 0.14 + uSeed * 0.00007);",
+    "  vec2 wv = vec2(",
+    "    fbm(vec2(p.z * 0.28, p.x * 0.55) * (0.55 + uWarp * 0.5) + t * 0.11),",
+    "    fbm(vec2(p.z * 0.26, p.y * 0.55) * (0.55 + uWarp * 0.5) - t * 0.09)",
+    "  );",
+    "  p.xy += (wv - 0.5) * (0.62 * uWarp + md * 0.32);",
+    "  float ang = atan(p.y, p.x);",
+    "  float freq = SAMPLE(uFreq, vec2(fract(ang / TAU + 0.5), 0.5)).r;",
+    "  float R = 1.20 + 0.16 * sin(p.z * 0.42 + t) + bass * 0.26 + freq * 0.10 * react;",
+    "  float tun = R - length(p.xy);",
+    "  float ribs = length(p.xy) - (R - 0.07);",
+    "  float ring = abs(fract(p.z * 0.32 + t * 0.04) - 0.5) - 0.035;",
+    "  ribs = max(ribs, ring);",
+    "  vec3 c = p;",
+    "  c.z = mod(p.z, 3.0) - 1.5;",
+    "  c.xy *= rot(t * 0.55 + floor((p.z + 1000.0) / 3.0));",
+    "  float crystal = sdOcta(c, 0.20 + 0.13 * bass + 0.06 * sin(t * 2.1 + uSeed));",
+    "  vec3 kt = p;",
+    "  kt.xy *= rot(t * 0.38);",
+    "  kt.z = mod(p.z, 4.2) - 2.1;",
+    "  kt.yz *= rot(t * 0.28 + md);",
+    "  kt.xz *= rot(0.7 + t * 0.1);",
+    "  float torus = sdTorus(kt, vec2(0.40 + 0.12 * md, 0.065 + 0.04 * hi));",
+    "  float d = tun;",
+    "  gMat = 0.0;",
+    "  if (ribs < d) { d = ribs; gMat = 1.0; }",
+    "  if (crystal < d) { d = crystal; gMat = 2.0; }",
+    "  if (torus < d) { d = torus; gMat = 3.0; }",
+    "  return d;",
+    "}",
+    "vec3 nrm(vec3 p) {",
+    "  float e = 0.0016;",
+    "  vec2 h = vec2(e, 0.0);",
+    "  return normalize(vec3(",
+    "    map(p + h.xyy) - map(p - h.xyy),",
+    "    map(p + h.yxy) - map(p - h.yxy),",
+    "    map(p + h.yyx) - map(p - h.yyx)",
+    "  ));",
+    "}",
+    "vec3 render(vec2 uv) {",
+    "  float t = uTime * uSpeed;",
+    "  vec3 ro = vec3(0.0, 0.0, -0.15);",
+    "  vec3 rd = normalize(vec3(uv, 1.32));",
+    "  rd.xy = rot(uMouse.x * 0.18) * rd.xy;",
+    "  rd.xz = rot(uMouse.y * 0.14) * rd.xz;",
+    "  float trav = 0.0;",
+    "  vec3 p;",
+    "  bool hit = false;",
+    "  for (int i = 0; i < 52; i++) {",
+    "    p = ro + rd * trav;",
+    "    float d = map(p);",
+    "    if (d < 0.001 * trav + 0.0008) { hit = true; break; }",
+    "    trav += d * 0.86;",
+    "    if (trav > 26.0) break;",
+    "  }",
+    "  float pl = fbm(uv * 2.4 + t * 0.14);",
+    "  float pl2 = fbm(uv * 5.2 - t * 0.09 + 8.0);",
+    "  vec3 col = pal(pl * 0.7 + uIrid + uBeat * 0.04) * 0.11;",
+    "  col += pal(pl2 + 0.45) * 0.055 * (0.4 + uHigh * uReact);",
+    "  if (hit) {",
+    "    vec3 n = nrm(p);",
+    "    vec3 lgt = normalize(vec3(0.45, 0.62, -0.48));",
+    "    float diff = clamp(dot(n, lgt), 0.0, 1.0);",
+    "    float fre = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.15);",
+    "    float thick = 2.1 + uIrid * 3.8 + uMid * uReact * 1.4;",
+    "    vec3 film = pal(fre * thick + uIrid + gMat * 0.19 + uTime * 0.045 + uBass * uReact * 0.2);",
+    "    vec3 base = mix(vec3(0.05, 0.06, 0.08), film, 0.88);",
+    "    base *= 0.22 + 0.9 * diff;",
+    "    base += film * fre * (0.72 + uIrid * 0.55);",
+    "    if (gMat > 1.5 && gMat < 2.5) base += pal(uTime * 0.2 + fre) * 0.32;",
+    "    if (gMat > 2.5) base += vec3(1.0, 0.86, 0.32) * fre * 0.38;",
+    "    if (gMat > 0.5 && gMat < 1.5) base += pal(0.15 + fre) * 0.12;",
+    "    float fog = 1.0 - exp(-trav * 0.085);",
+    "    col = mix(base, col, clamp(fog, 0.0, 1.0));",
+    "    col += film * 0.11 / (1.0 + trav * 0.16);",
+    "  } else {",
+    "    col += pal(uBeat + uIrid) * 0.05 * uBass * uReact;",
+    "  }",
+    "  float glow = 0.11 / (0.16 + dot(uv, uv));",
+    "  col += pal(0.12 + uIrid + uBeat) * glow * (0.14 + 0.36 * uBass * uReact);",
+    "  return col;",
+    "}",
+    "void main() {",
+    "  vec2 fragCoord = gl_FragCoord.xy;",
+    "  vec2 uv = (fragCoord - 0.5 * uRes) / min(uRes.y, uRes.x);",
+    "  float g = uGlitch * (0.35 + uHigh * uReact);",
+    "  float kick = exp(-fract(uBeat) * 8.0);",
+    "  float aberr = (0.0035 + 0.014 * g) * (1.0 + kick);",
+    "  float slice = step(0.965, hash21(vec2(floor(uv.y * 42.0), floor(uTime * 10.0))));",
+    "  uv.x += slice * (hash21(vec2(floor(uTime * 10.0), 2.3)) - 0.5) * 0.16 * g;",
+    "  vec3 col = render(uv);",
+    "  col.r = mix(col.r, render(uv + vec2(aberr, 0.0)).r, 0.85);",
+    "  col.b = mix(col.b, render(uv - vec2(aberr, 0.02 * aberr)).b, 0.85);",
+    "  float scan = 0.88 + 0.12 * sin(fragCoord.y * 2.15);",
+    "  col *= scan;",
+    "  vec2 q = fragCoord / uRes;",
+    "  col *= 0.32 + 0.68 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.34);",
+    "  col += (hash21(fragCoord + vec2(uTime * 0.1, uTime)) - 0.5) * 0.035;",
+    "  col = col / (1.0 + col * 0.35);",
+    "  col = pow(max(col, 0.0), vec3(0.86));",
+    "  fragColor = vec4(col, 1.0);",
+    "}"
+  ].join("\n");
+
+  function shaderSrc(is2, kind) {
+    if (kind === "vs") {
+      return is2
+        ? "#version 300 es\nin vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }"
+        : "attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }";
+    }
+    var head = is2
+      ? "#version 300 es\nprecision highp float;\n#define SAMPLE(tex, uv) texture(tex, uv)\nout vec4 fragColor;\n"
+      : "precision highp float;\n#define SAMPLE(tex, uv) texture2D(tex, uv)\n#define fragColor gl_FragColor\n";
+    return head + FS_SOURCE;
+  }
+
+  function compile(gl, type, src) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      throw new Error(gl.getShaderInfoLog(sh) || "shader compile failed");
+    }
+    return sh;
+  }
+
+  function makeProgram(gl, is2) {
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, shaderSrc(is2, "vs")));
+    gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, shaderSrc(is2, "fs")));
+    gl.bindAttribLocation(prog, 0, "aPos");
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(prog) || "program link failed");
+    }
+    return prog;
+  }
+
+  var gl = null;
+  var isWebGL2 = false;
+  var prog = null;
+  var uniforms = {};
+  var freqTex = null;
+  var freqData = new Uint8Array(256 * 4);
+
+  function setError(msg) {
+    document.body.dataset.glError = msg || "";
+    if (msg) {
+      glError.hidden = false;
+      glError.textContent = msg;
+    } else {
+      glError.hidden = true;
+      glError.textContent = "";
+    }
+  }
+
+  function loc(name) {
+    if (!(name in uniforms)) uniforms[name] = gl.getUniformLocation(prog, name);
+    return uniforms[name];
+  }
+
+  function initGL() {
+    var opts = { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" };
+    gl = canvas.getContext("webgl2", opts);
+    if (gl) {
+      isWebGL2 = true;
+    } else {
+      gl = canvas.getContext("webgl", opts) || canvas.getContext("experimental-webgl", opts);
+      isWebGL2 = false;
+    }
+    if (!gl) throw new Error("WebGL is not available");
+    prog = makeProgram(gl, isWebGL2);
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    freqTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, freqTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, freqData);
+    gl.uniform1i(loc("uFreq"), 0);
+    document.body.dataset.renderer = isWebGL2 ? "webgl2" : "webgl";
+  }
+
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    var h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      if (gl) gl.viewport(0, 0, w, h);
+    }
+  }
+
+  // --- audio ---
+  var audio = {
+    ctx: null,
+    master: null,
+    analyser: null,
+    kickGain: null,
+    hatGain: null,
+    acidGain: null,
+    arpGain: null,
+    padGain: null,
+    acidOsc: null,
+    acidFilter1: null,
+    acidFilter2: null,
+    acidGate: null,
+    padOscA: null,
+    padOscB: null,
+    padFilter: null,
+    padLfo: null,
+    delay: null,
+    noiseBuf: null,
+    timer: null,
+    nextNote: 0,
+    step: 0,
+    pattern: null,
+    freqA: new Uint8Array(1024),
+    waveA: new Uint8Array(1024)
+  };
+
+  function makeNoiseBuffer(ctx) {
+    var n = ctx.sampleRate * 1;
+    var buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function makeDriveCurve(amount) {
+    var n = 1024;
+    var curve = new Float32Array(n);
+    var k = amount;
+    for (var i = 0; i < n; i++) {
+      var x = (i / (n - 1)) * 2 - 1;
+      curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  function slider(id) {
+    var el = sliders[id];
+    var min = Number(el.min);
+    var max = Number(el.max);
+    return L.clamp(Number(el.value), min, max);
+  }
+
+  function rebuildPattern() {
+    audio.pattern = L.buildAcidPattern(seedState.value);
+  }
+
+  function setupAudio() {
+    if (audio.ctx) return audio.ctx;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error("Web Audio API is not available");
+    var ctx = new Ctx();
+    var master = ctx.createGain();
+    master.gain.value = slider("volume");
+    var comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18;
+    comp.knee.value = 18;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.12;
+    var analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.68;
+    master.connect(comp);
+    comp.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    function bus(v) {
+      var g = ctx.createGain();
+      g.gain.value = v;
+      g.connect(master);
+      return g;
+    }
+
+    audio.ctx = ctx;
+    audio.master = master;
+    audio.analyser = analyser;
+    audio.kickGain = bus(0.85);
+    audio.hatGain = bus(0.22);
+    audio.acidGain = bus(0.38);
+    audio.arpGain = bus(0.16);
+    audio.padGain = bus(0.07);
+    audio.noiseBuf = makeNoiseBuffer(ctx);
+    audio.freqA = new Uint8Array(analyser.frequencyBinCount);
+    audio.waveA = new Uint8Array(analyser.fftSize);
+
+    var shaper = ctx.createWaveShaper();
+    shaper.curve = makeDriveCurve(1.8);
+    shaper.oversample = "2x";
+    var f1 = ctx.createBiquadFilter();
+    f1.type = "lowpass";
+    f1.frequency.value = 800;
+    f1.Q.value = 8;
+    var f2 = ctx.createBiquadFilter();
+    f2.type = "lowpass";
+    f2.frequency.value = 1200;
+    f2.Q.value = 4;
+    var gate = ctx.createGain();
+    gate.gain.value = 0;
+    var osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = L.midiToFreq(audio.pattern ? audio.pattern.steps[0].note : 40);
+    osc.connect(f1);
+    f1.connect(f2);
+    f2.connect(shaper);
+    shaper.connect(gate);
+    gate.connect(audio.acidGain);
+    osc.start();
+    audio.acidOsc = osc;
+    audio.acidFilter1 = f1;
+    audio.acidFilter2 = f2;
+    audio.acidGate = gate;
+
+    var padF = ctx.createBiquadFilter();
+    padF.type = "lowpass";
+    padF.frequency.value = 520;
+    padF.Q.value = 0.7;
+    var padA = ctx.createOscillator();
+    var padB = ctx.createOscillator();
+    padA.type = "sawtooth";
+    padB.type = "sawtooth";
+    var root = audio.pattern ? audio.pattern.root + 24 : 52;
+    padA.frequency.value = L.midiToFreq(root);
+    padB.frequency.value = L.midiToFreq(root) * 1.005;
+    var padGA = ctx.createGain();
+    var padGB = ctx.createGain();
+    padGA.gain.value = 0.5;
+    padGB.gain.value = 0.5;
+    padA.connect(padGA);
+    padB.connect(padGB);
+    padGA.connect(padF);
+    padGB.connect(padF);
+    padF.connect(audio.padGain);
+    var lfo = ctx.createOscillator();
+    var lfoG = ctx.createGain();
+    lfo.frequency.value = 0.13;
+    lfoG.gain.value = 180;
+    lfo.connect(lfoG);
+    lfoG.connect(padF.frequency);
+    padA.start();
+    padB.start();
+    lfo.start();
+    audio.padOscA = padA;
+    audio.padOscB = padB;
+    audio.padFilter = padF;
+
+    var delay = ctx.createDelay(1.0);
+    delay.delayTime.value = 0.22;
+    var fb = ctx.createGain();
+    fb.gain.value = 0.32;
+    var delayHp = ctx.createBiquadFilter();
+    delayHp.type = "highpass";
+    delayHp.frequency.value = 400;
+    audio.arpGain.connect(delayHp);
+    delayHp.connect(delay);
+    delay.connect(fb);
+    fb.connect(delay);
+    delay.connect(master);
+    audio.delay = delay;
+
+    rebuildPattern();
+    return ctx;
+  }
+
+  function scheduleKick(time) {
+    var ctx = audio.ctx;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    var flt = ctx.createBiquadFilter();
+    flt.type = "lowpass";
+    flt.frequency.setValueAtTime(1800, time);
+    flt.frequency.exponentialRampToValueAtTime(200, time + 0.08);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(36, time + 0.11);
+    gain.gain.setValueAtTime(1, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.26);
+    osc.connect(flt);
+    flt.connect(gain);
+    gain.connect(audio.kickGain);
+    osc.start(time);
+    osc.stop(time + 0.3);
+  }
+
+  function scheduleHat(time, open) {
+    var ctx = audio.ctx;
+    var src = ctx.createBufferSource();
+    src.buffer = audio.noiseBuf;
+    var hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = open ? 6000 : 8000;
+    hp.Q.value = 0.7;
+    var gain = ctx.createGain();
+    var dur = open ? 0.18 : 0.045;
+    gain.gain.setValueAtTime(open ? 0.55 : 0.35, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(audio.hatGain);
+    src.start(time);
+    src.stop(time + dur + 0.02);
+  }
+
+  function scheduleArp(time, midi) {
+    var ctx = audio.ctx;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(L.midiToFreq(midi + 12), time);
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(0.7, time + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    osc.connect(gain);
+    gain.connect(audio.arpGain);
+    osc.start(time);
+    osc.stop(time + 0.14);
+  }
+
+  function scheduleAcid(time, step, stepDur) {
+    var st = audio.pattern.steps[step];
+    var ctx = audio.ctx;
+    var cutoff = slider("cutoff");
+    var reso = slider("resonance");
+    var q = 4 + reso * 16;
+    audio.acidFilter1.Q.setValueAtTime(q, time);
+    audio.acidFilter2.Q.setValueAtTime(q * 0.45, time);
+    if (st.rest) {
+      audio.acidGate.gain.cancelScheduledValues(time);
+      audio.acidGate.gain.setValueAtTime(Math.max(audio.acidGate.gain.value, 0.0001), time);
+      audio.acidGate.gain.exponentialRampToValueAtTime(0.0001, time + 0.03);
+      return;
+    }
+    var freq = L.midiToFreq(st.note);
+    if (st.slide) {
+      audio.acidOsc.frequency.setValueAtTime(Math.max(audio.acidOsc.frequency.value, 20), time);
+      audio.acidOsc.frequency.exponentialRampToValueAtTime(freq, time + stepDur * 0.85);
+    } else {
+      audio.acidOsc.frequency.setValueAtTime(freq, time);
+    }
+    var peak = st.accent ? 0.95 : 0.5;
+    audio.acidGate.gain.cancelScheduledValues(time);
+    audio.acidGate.gain.setValueAtTime(Math.max(audio.acidGate.gain.value, 0.0001), time);
+    audio.acidGate.gain.exponentialRampToValueAtTime(peak, time + 0.008);
+    var hold = st.slide ? stepDur * 0.95 : (st.accent ? 0.2 : 0.11);
+    audio.acidGate.gain.exponentialRampToValueAtTime(0.0001, time + hold);
+    var base = 180 + cutoff * 5200;
+    var env = (st.accent ? 2600 : 1100) * (0.45 + cutoff);
+    var startF = Math.min(12000, base + env);
+    var endF = Math.max(80, base * 0.35);
+    audio.acidFilter1.frequency.cancelScheduledValues(time);
+    audio.acidFilter1.frequency.setValueAtTime(startF, time);
+    audio.acidFilter1.frequency.exponentialRampToValueAtTime(endF, time + 0.16);
+    audio.acidFilter2.frequency.setValueAtTime(Math.min(14000, startF * 1.2), time);
+    audio.acidFilter2.frequency.exponentialRampToValueAtTime(Math.max(120, endF * 1.1), time + 0.16);
+  }
+
+  function tickAudio() {
+    if (!audio.ctx || !audioOn) return;
+    var ctx = audio.ctx;
+    var bpm = slider("bpm");
+    var stepDur = 60 / bpm / 4;
+    var ahead = 0.12;
+    if (audio.nextNote < ctx.currentTime) audio.nextNote = ctx.currentTime + 0.02;
+    while (audio.nextNote < ctx.currentTime + ahead) {
+      var step = audio.step;
+      scheduleAcid(audio.nextNote, step, stepDur);
+      if (step % 4 === 0) scheduleKick(audio.nextNote);
+      if (step % 2 === 1) scheduleHat(audio.nextNote, step % 8 === 7);
+      if (!audio.pattern.steps[step].rest && step % 2 === 0) {
+        scheduleArp(audio.nextNote, audio.pattern.steps[step].note);
+      }
+      if (audio.padOscA) {
+        var root = audio.pattern.root + 24;
+        audio.padOscA.frequency.setTargetAtTime(L.midiToFreq(root), audio.nextNote, 0.08);
+        audio.padOscB.frequency.setTargetAtTime(L.midiToFreq(root) * 1.005, audio.nextNote, 0.08);
+      }
+      if (audio.delay) {
+        audio.delay.delayTime.setTargetAtTime((60 / bpm) * 0.75, audio.nextNote, 0.05);
+      }
+      audio.nextNote += stepDur;
+      audio.step = (step + 1) % 16;
+    }
+  }
+
+  function startAudio() {
+    try {
+      setupAudio();
+    } catch (err) {
+      setError(String(err && err.message ? err.message : err));
+      return;
+    }
+    rebuildPattern();
+    var p = audio.ctx.resume();
+    Promise.resolve(p).then(function () {
+      audioOn = audio.ctx.state !== "suspended";
+      if (audioOn) {
+        audio.nextNote = audio.ctx.currentTime + 0.05;
+        audio.step = 0;
+        if (!audio.timer) {
+          audio.timer = setInterval(tickAudio, 25);
+        }
+        tickAudio();
+      }
+      syncAudioUi();
+    }).catch(function (err) {
+      setError(String(err && err.message ? err.message : err));
+      syncAudioUi();
+    });
+  }
+
+  function stopAudio() {
+    audioOn = false;
+    if (audio.timer) {
+      clearInterval(audio.timer);
+      audio.timer = null;
+    }
+    if (audio.ctx && audio.acidGate) {
+      try {
+        var t = audio.ctx.currentTime;
+        audio.acidGate.gain.cancelScheduledValues(t);
+        audio.acidGate.gain.setTargetAtTime(0.0001, t, 0.03);
+        audio.master.gain.setTargetAtTime(0.0001, t, 0.03);
+        setTimeout(function () {
+          if (audio.ctx && !audioOn) {
+            audio.master.gain.setValueAtTime(slider("volume"), audio.ctx.currentTime);
+            audio.ctx.suspend();
+          }
+        }, 80);
+      } catch (e) { /* ignore */ }
+    }
+    syncAudioUi();
+  }
+
+  function toggleAudio() {
+    if (audioOn) stopAudio();
+    else startAudio();
+  }
+
+  function syncAudioUi() {
+    document.body.dataset.audio = audioOn ? "on" : "off";
+    audioToggle.setAttribute("aria-pressed", audioOn ? "true" : "false");
+    audioToggle.textContent = audioOn ? "Stop Synth" : "Start Synth";
+    if (audioOn) hint.hidden = true;
+  }
+
+  function updateVolume() {
+    if (audio.master && audio.ctx) {
+      audio.master.gain.setTargetAtTime(slider("volume"), audio.ctx.currentTime, 0.03);
+    }
+  }
+
+  // --- seed / URL ---
+  function applySeed(parsed, pushHash) {
+    if (!parsed || !parsed.ok) return;
+    seedState = { display: parsed.display, value: parsed.value >>> 0 };
+    seedInput.value = seedState.display;
+    document.body.dataset.seed = String(seedState.value);
+    if (pushHash !== false) {
+      var next = L.seedHashString(seedState.display);
+      if (location.hash !== next) {
+        if (history.replaceState) history.replaceState(null, "", location.pathname + location.search + next);
+        else location.hash = next.slice(1);
+      }
+    }
+    rebuildPattern();
+  }
+
+  function randomizeSeed() {
+    applySeed(L.randomSeed(), true);
+  }
+
+  function loadSeedFromUrl() {
+    var fromUrl = L.readSeedFromLocation(location);
+    if (fromUrl && fromUrl.ok) applySeed(fromUrl, true);
+    else applySeed(L.randomSeed(), true);
+  }
+
+  // --- hud ---
+  function setHud(open) {
+    hudOpen = !!open;
+    hud.classList.toggle("collapsed", !hudOpen);
+    hudToggle.setAttribute("aria-expanded", hudOpen ? "true" : "false");
+    hudToggle.textContent = hudOpen ? "hide" : "H";
+    document.body.dataset.hud = hudOpen ? "open" : "closed";
+  }
+
+  function toggleHud() { setHud(!hudOpen); }
+
+  function toggleFullscreen() {
+    var el = document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen;
+    var leave = document.exitFullscreen || document.webkitExitFullscreen;
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (leave) leave.call(document);
+      } else if (req) {
+        Promise.resolve(req.call(el)).catch(function () {});
+      }
+    } catch (e) { /* headless / denied */ }
+  }
+
+  function fmt(id) {
+    var el = sliders[id];
+    var v = slider(id);
+    var label = document.getElementById(id + "-val");
+    if (label) label.textContent = id === "bpm" ? String(Math.round(v)) : v.toFixed(2);
+    return v;
+  }
+
+  function bindSliders() {
+    Object.keys(sliders).forEach(function (id) {
+      sliders[id].addEventListener("input", function () {
+        fmt(id);
+        if (id === "volume") updateVolume();
+      });
+      fmt(id);
+    });
+  }
+
+  function isTypingTarget(el) {
+    if (!el) return false;
+    var tag = (el.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || el.isContentEditable;
+  }
+
+  function onKey(e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (isTypingTarget(e.target) && e.key !== "Escape") return;
+    var k = e.key;
+    if (k === " " || k === "Spacebar") {
+      e.preventDefault();
+      toggleAudio();
+    } else if (k === "h" || k === "H") {
+      e.preventDefault();
+      toggleHud();
+    } else if (k === "r" || k === "R") {
+      e.preventDefault();
+      randomizeSeed();
+    } else if (k === "f" || k === "F") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (k === "Escape" && isTypingTarget(e.target)) {
+      e.target.blur();
+    }
+  }
+
+  function onPointer(e) {
+    var r = canvas.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return;
+    mouseT[0] = ((e.clientX - r.left) / r.width - 0.5) * 2;
+    mouseT[1] = (0.5 - (e.clientY - r.top) / r.height) * 2;
+  }
+
+  function bandEnergy(arr, lo, hi) {
+    var s = 0, n = 0, i;
+    for (i = lo; i < hi && i < arr.length; i++) { s += arr[i]; n++; }
+    return n ? s / n / 255 : 0;
+  }
+
+  function updateAnalysis(dt, time, beat) {
+    var kick = Math.exp(-((beat % 1 + 1) % 1) * 7.5);
+    var lfoM = 0.5 + 0.5 * Math.sin(time * 2.15);
+    var lfoH = 0.5 + 0.5 * Math.sin(time * 5.05 + 1.2);
+    var ib = L.clamp(0.18 + kick * 0.82, 0, 1);
+    var im = L.clamp(0.15 + lfoM * 0.45, 0, 1);
+    var ih = L.clamp(0.08 + lfoH * 0.4, 0, 1);
+    var ab = 0, am = 0, ah = 0;
+    var i, v, nyquist, binHz;
+    if (audioOn && audio.analyser) {
+      audio.analyser.getByteFrequencyData(audio.freqA);
+      audio.analyser.getByteTimeDomainData(audio.waveA);
+      nyquist = (audio.ctx && audio.ctx.sampleRate) ? audio.ctx.sampleRate * 0.5 : 22050;
+      binHz = nyquist / audio.freqA.length;
+      ab = bandEnergy(audio.freqA, 1, Math.max(2, Math.floor(180 / binHz)));
+      am = bandEnergy(audio.freqA, Math.floor(180 / binHz), Math.floor(1800 / binHz));
+      ah = bandEnergy(audio.freqA, Math.floor(1800 / binHz), Math.floor(8000 / binHz));
+      ab = Math.pow(ab, 0.7);
+      am = Math.pow(am, 0.75);
+      ah = Math.pow(ah, 0.8);
+    }
+    var targetB = Math.max(ib * 0.65, ab);
+    var targetM = Math.max(im * 0.45, am);
+    var targetH = Math.max(ih * 0.4, ah);
+    var k = 1 - Math.exp(-dt * 10);
+    visual.bass += (targetB - visual.bass) * k;
+    visual.mid += (targetM - visual.mid) * k;
+    visual.high += (targetH - visual.high) * k;
+    visual.beat = beat;
+    for (i = 0; i < 256; i++) {
+      if (audioOn && audio.freqA.length) {
+        var idx = Math.min(audio.freqA.length - 1, Math.floor(Math.pow(i / 255, 1.4) * (audio.freqA.length - 1)));
+        v = audio.freqA[idx];
+      } else {
+        v = Math.floor(255 * L.clamp(0.15 + 0.75 * Math.exp(-Math.abs(i / 255 - kick * 0.2) * 8) + 0.2 * Math.sin(time * 3 + i * 0.2), 0, 1));
+      }
+      freqData[i * 4] = v;
+      freqData[i * 4 + 1] = audioOn && audio.waveA.length ? audio.waveA[Math.floor(i / 255 * (audio.waveA.length - 1))] : 128;
+      freqData[i * 4 + 2] = Math.floor(visual.bass * 255);
+      freqData[i * 4 + 3] = 255;
+    }
+    document.body.dataset.bass = visual.bass.toFixed(3);
+    document.body.dataset.mid = visual.mid.toFixed(3);
+    document.body.dataset.high = visual.high.toFixed(3);
+    document.body.dataset.beat = visual.beat.toFixed(3);
+  }
+
+  function drawSpectrum() {
+    var w = specCanvas.width, h = specCanvas.height;
+    specCtx.fillStyle = "rgba(0,0,0,0.65)";
+    specCtx.fillRect(0, 0, w, h);
+    var i, x, bar, v;
+    for (i = 0; i < 64; i++) {
+      v = freqData[Math.floor(i / 63 * 255) * 4] / 255;
+      bar = Math.max(1, v * (h - 2));
+      x = i * (w / 64);
+      specCtx.fillStyle = i < 8 ? "#c6ff3a" : i < 28 ? "#67f0ff" : "#ff4ae0";
+      specCtx.globalAlpha = 0.55 + v * 0.45;
+      specCtx.fillRect(x + 1, h - bar - 1, Math.max(1, w / 64 - 2), bar);
+    }
+    specCtx.globalAlpha = 1;
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    resize();
+    var dt = Math.min(0.05, Math.max(0.001, (now - lastMs) / 1000));
+    lastMs = now;
+    var inst = 1 / dt;
+    fpsSmoothed = fpsSmoothed ? fpsSmoothed * 0.9 + inst * 0.1 : inst;
+    var fpsShow = Math.round(fpsSmoothed);
+    fpsEl.textContent = fpsShow + " fps";
+    document.body.dataset.fps = String(fpsShow);
+    var time = (now - startMs) / 1000;
+    var bpm = slider("bpm");
+    var beat = (time * bpm) / 60;
+    mouse[0] += (mouseT[0] - mouse[0]) * (1 - Math.exp(-dt * 6));
+    mouse[1] += (mouseT[1] - mouse[1]) * (1 - Math.exp(-dt * 6));
+    updateAnalysis(dt, time, beat);
+    if (gl && prog) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, freqTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, freqData);
+      gl.useProgram(prog);
+      gl.uniform2f(loc("uRes"), canvas.width, canvas.height);
+      gl.uniform1f(loc("uTime"), time);
+      gl.uniform1f(loc("uBeat"), beat);
+      gl.uniform1f(loc("uBass"), visual.bass);
+      gl.uniform1f(loc("uMid"), visual.mid);
+      gl.uniform1f(loc("uHigh"), visual.high);
+      gl.uniform1f(loc("uSeed"), seedState.value);
+      gl.uniform1f(loc("uSpeed"), slider("speed"));
+      gl.uniform1f(loc("uWarp"), slider("warp"));
+      gl.uniform1f(loc("uIrid"), slider("irid"));
+      gl.uniform1f(loc("uReact"), slider("react"));
+      gl.uniform1f(loc("uGlitch"), slider("glitch"));
+      gl.uniform2f(loc("uMouse"), mouse[0], mouse[1]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (document.body.dataset.ready !== "1") document.body.dataset.ready = "1";
+    }
+    drawSpectrum();
+  }
+
+  function boot() {
+    bindSliders();
+    setHud(true);
+    loadSeedFromUrl();
+    seedInput.addEventListener("input", function () {
+      var parsed = L.parseSeed(seedInput.value);
+      if (parsed.ok) applySeed(parsed, true);
+    });
+    document.getElementById("seed-random").addEventListener("click", function () {
+      randomizeSeed();
+    });
+    audioToggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      toggleAudio();
+    });
+    hudToggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      toggleHud();
+    });
+    document.getElementById("fullscreen").addEventListener("click", function (e) {
+      e.preventDefault();
+      toggleFullscreen();
+    });
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    canvas.addEventListener("pointerdown", function (e) {
+      onPointer(e);
+      if (!audioOn && e.button === 0) startAudio();
+    });
+    window.addEventListener("hashchange", function () {
+      var fromUrl = L.readSeedFromLocation(location);
+      if (fromUrl && fromUrl.ok && fromUrl.display !== seedState.display) applySeed(fromUrl, false);
+    });
+    window.addEventListener("resize", resize);
+    try {
+      initGL();
+      setError("");
+    } catch (err) {
+      setError(String(err && err.message ? err.message : err));
+    }
+    resize();
+    requestAnimationFrame(frame);
+  }
+
+  boot();
+})();
+  </script>
+</body>
+</html>
