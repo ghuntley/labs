@@ -48,7 +48,8 @@
       color: var(--fg);
       font-size: 11px;
       letter-spacing: 0.04em;
-      pointer-events: none;
+      pointer-events: auto;
+      cursor: pointer;
       white-space: nowrap;
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
     }
@@ -236,7 +237,7 @@
 </head>
 <body data-ready="0" data-renderer="" data-seed="" data-audio="off" data-hud="closed" data-fps="0" data-bass="0" data-mid="0" data-high="0" data-beat="0" data-scene="0" data-scene-auto="1" data-gl-error="">
   <canvas id="c" tabindex="-1"></canvas>
-  <div id="hint">click or press any key to start the synth</div>
+  <div id="hint" role="button" tabindex="0">tap or press a key to unmute</div>
   <pre id="gl-error" hidden></pre>
   <aside id="hud" class="collapsed" aria-label="Controls">
     <div class="hud-top">
@@ -1226,7 +1227,7 @@ var ArtLogic = (function () {
   }
 
   function tickAudio() {
-    if (!audio.ctx || !audioOn) return;
+    if (!audio.ctx || !audioOn || audio.ctx.state !== "running") return;
     var ctx = audio.ctx;
     var bpm = slider("bpm");
     var stepDur = 60 / bpm / 4;
@@ -1253,39 +1254,82 @@ var ArtLogic = (function () {
     }
   }
 
+  var UNLOCK_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
+  var wantAudio = true;
+
+  function ctxRunning() {
+    return !!(audio.ctx && audio.ctx.state === "running");
+  }
+
   function disarmGestureUnlock() {
     if (!unlockBound) return;
-    window.removeEventListener("pointerdown", onGestureUnlock, true);
-    window.removeEventListener("keydown", onGestureUnlock, true);
+    for (var i = 0; i < UNLOCK_EVENTS.length; i++) {
+      window.removeEventListener(UNLOCK_EVENTS[i], onGestureUnlock, true);
+    }
     unlockBound = false;
   }
 
   function onGestureUnlock(e) {
-    if (e && e.type === "pointerdown" && e.button && e.button !== 0) return;
-    disarmGestureUnlock();
-    if (!audioOn) startAudio();
+    if (!wantAudio) return;
+    if (e && (e.type === "pointerdown" || e.type === "mousedown") && e.button && e.button !== 0) return;
+    if (ctxRunning() && audioOn) return;
+    // Keep listeners until beginPlayback sees ctx.state === "running".
+    startAudio();
   }
 
   function armGestureUnlock() {
-    if (unlockBound || audioOn) return;
+    if (unlockBound || (audioOn && ctxRunning())) return;
     unlockBound = true;
-    window.addEventListener("pointerdown", onGestureUnlock, true);
-    window.addEventListener("keydown", onGestureUnlock, true);
-    if (hint) {
-      hint.hidden = false;
-      hint.textContent = "click or press any key to start the synth";
+    for (var i = 0; i < UNLOCK_EVENTS.length; i++) {
+      window.addEventListener(UNLOCK_EVENTS[i], onGestureUnlock, true);
     }
+    syncAudioUi();
+  }
+
+  function nudgeUnlock() {
+    if (!audio.ctx) return;
+    try { audio.ctx.resume(); } catch (e) { /* ignore */ }
+    try {
+      var src = audio.ctx.createBufferSource();
+      src.buffer = audio.ctx.createBuffer(1, 1, audio.ctx.sampleRate);
+      var g = audio.ctx.createGain();
+      g.gain.value = 0;
+      src.connect(g);
+      g.connect(audio.ctx.destination);
+      src.start(0);
+    } catch (e2) { /* ignore */ }
+  }
+
+  function watchContext() {
+    if (!audio.ctx || audio.ctx._thinFilmWatched) return;
+    audio.ctx._thinFilmWatched = true;
+    audio.ctx.addEventListener("statechange", function () {
+      if (!wantAudio) { syncAudioUi(); return; }
+      if (ctxRunning()) beginPlayback();
+      else armGestureUnlock();
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (wantAudio && document.visibilityState === "visible") startAudio();
+    });
+    window.addEventListener("focus", function () {
+      if (wantAudio) startAudio();
+    });
   }
 
   function beginPlayback() {
-    if (!audio.ctx || audio.ctx.state === "suspended") {
+    if (!audio.ctx || audio.ctx.state !== "running") {
       armGestureUnlock();
       syncAudioUi();
       return;
     }
+    var now = audio.ctx.currentTime;
+    var vol = slider("volume");
+    if (!Number.isFinite(vol) || vol <= 0) vol = 0.72;
+    audio.master.gain.cancelScheduledValues(now);
+    audio.master.gain.setValueAtTime(vol, now);
     if (!audioOn) {
       audioOn = true;
-      audio.nextNote = audio.ctx.currentTime + 0.05;
+      audio.nextNote = now + 0.02;
       audio.step = 0;
       audio.bellClock = 0;
     }
@@ -1296,6 +1340,7 @@ var ArtLogic = (function () {
   }
 
   function startAudio() {
+    wantAudio = true;
     try {
       setupAudio();
     } catch (err) {
@@ -1303,7 +1348,9 @@ var ArtLogic = (function () {
       armGestureUnlock();
       return;
     }
+    watchContext();
     rebuildPattern();
+    nudgeUnlock();
     var p;
     try {
       p = audio.ctx.resume();
@@ -1312,14 +1359,20 @@ var ArtLogic = (function () {
       syncAudioUi();
       return;
     }
-    Promise.resolve(p).then(beginPlayback).catch(function () {
-      armGestureUnlock();
+    if (ctxRunning()) beginPlayback();
+    else armGestureUnlock();
+    Promise.resolve(p).then(function () {
+      if (wantAudio) beginPlayback();
+    }).catch(function () {
+      if (wantAudio) armGestureUnlock();
       syncAudioUi();
     });
   }
 
   function stopAudio() {
+    wantAudio = false;
     audioOn = false;
+    disarmGestureUnlock();
     if (audio.timer) {
       clearInterval(audio.timer);
       audio.timer = null;
@@ -1329,9 +1382,10 @@ var ArtLogic = (function () {
         var t = audio.ctx.currentTime;
         audio.acidGate.gain.cancelScheduledValues(t);
         audio.acidGate.gain.setTargetAtTime(0.0001, t, 0.03);
+        audio.master.gain.cancelScheduledValues(t);
         audio.master.gain.setTargetAtTime(0.0001, t, 0.03);
         setTimeout(function () {
-          if (audio.ctx && !audioOn) {
+          if (audio.ctx && !wantAudio) {
             audio.master.gain.setValueAtTime(slider("volume"), audio.ctx.currentTime);
             audio.ctx.suspend();
           }
@@ -1342,16 +1396,25 @@ var ArtLogic = (function () {
   }
 
   function toggleAudio() {
-    if (audioOn) stopAudio();
+    if (audioOn && ctxRunning()) stopAudio();
     else startAudio();
   }
 
   function syncAudioUi() {
-    document.body.dataset.audio = audioOn ? "on" : "off";
-    audioToggle.setAttribute("aria-pressed", audioOn ? "true" : "false");
-    audioToggle.textContent = audioOn ? "Stop Synth" : "Start Synth";
-    if (audioOn) hint.hidden = true;
-    else if (unlockBound) hint.hidden = false;
+    var on = !!(audioOn && ctxRunning());
+    document.body.dataset.audio = on ? "on" : "off";
+    audioToggle.setAttribute("aria-pressed", on ? "true" : "false");
+    audioToggle.textContent = on ? "Stop Synth" : "Start Synth";
+    if (hint) {
+      if (on) {
+        hint.hidden = true;
+      } else if (wantAudio) {
+        hint.hidden = false;
+        hint.textContent = "tap or press a key to unmute";
+      } else {
+        hint.hidden = true;
+      }
+    }
   }
 
   function updateVolume() {
@@ -1606,6 +1669,7 @@ var ArtLogic = (function () {
     mouse[1] += (mouseT[1] - mouse[1]) * (1 - Math.exp(-dt * 6));
     updateScene(beat);
     updateAnalysis(dt, time, beat);
+    if (audioOn) tickAudio();
     if (gl && prog) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, freqTex);
@@ -1682,8 +1746,16 @@ var ArtLogic = (function () {
     } catch (err) {
       setError(String(err && err.message ? err.message : err));
     }
+    if (hint) {
+      hint.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (wantAudio) startAudio();
+      });
+    }
     resize();
     requestAnimationFrame(frame);
+    wantAudio = true;
+    armGestureUnlock();
     startAudio();
   }
 
