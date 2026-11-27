@@ -33,9 +33,10 @@
         nixos = labs;
       };
 
-      packages.x86_64-linux.site =
-        nixpkgs.legacyPackages.x86_64-linux.callPackage ./packages/site.nix
-          { };
+      packages.x86_64-linux = {
+        site = nixpkgs.legacyPackages.x86_64-linux.callPackage ./packages/site.nix { };
+        surf = nixpkgs.legacyPackages.x86_64-linux.callPackage ./packages/surf.nix { };
+      };
 
       formatter.x86_64-linux = nixpkgs.legacyPackages.x86_64-linux.nixfmt;
     };

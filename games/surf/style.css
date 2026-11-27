@@ -1,0 +1,175 @@
+:root {
+  --bg: #05040c;
+  --panel: rgba(12, 10, 28, 0.82);
+  --line: rgba(140, 220, 255, 0.22);
+  --text: #e9f4ff;
+  --muted: #8fa3c0;
+  --cyan: #38e8ff;
+  --pink: #ff4fd8;
+  --gold: #ffd34d;
+  --red: #ff2d55;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* Panels show only in their state. */
+.panel, #hud { display: none; }
+body[data-state="menu"] #menu,
+body[data-state="loading"] #loading,
+body[data-state="paused"] #paused,
+body[data-state="results"] #results { display: flex; }
+body[data-state="ride"] #hud,
+body[data-state="countdown"] #hud,
+body[data-state="paused"] #hud { display: block; }
+
+.panel {
+  position: fixed; inset: 0; z-index: 10;
+  flex-direction: column; align-items: center;
+  overflow-y: auto; padding: 24px 16px 40px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(56, 232, 255, 0.14), transparent 60%),
+              radial-gradient(ellipse at 50% 100%, rgba(255, 79, 216, 0.12), transparent 60%),
+              rgba(5, 4, 12, 0.88);
+}
+.panel.center { justify-content: center; gap: 12px; }
+
+.logo {
+  font-size: clamp(56px, 14vw, 120px); line-height: 1; margin: 12px 0 0;
+  font-weight: 900; letter-spacing: -0.04em; font-style: italic;
+  background: linear-gradient(90deg, var(--cyan), var(--pink));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 18px rgba(56, 232, 255, 0.45));
+}
+.tag { color: var(--muted); margin: 4px 0 20px; }
+
+.card {
+  width: 100%; max-width: 560px; margin: 0 0 14px; padding: 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+}
+.card h2 { margin: 0 0 10px; font-size: 18px; }
+
+.drop {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 22px 12px; border: 1.5px dashed var(--line); border-radius: 10px;
+  cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s;
+}
+.drop:hover, .drop.over { border-color: var(--cyan); background: rgba(56, 232, 255, 0.06); }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.drop small { color: var(--muted); }
+
+form { display: flex; gap: 8px; }
+input[type="url"], input[type="number"] {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 9px;
+  border: 1px solid var(--line); background: rgba(0, 0, 0, 0.35); color: var(--text); font: inherit;
+}
+input[type="number"] { width: 5.5em; flex: none; }
+input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+button {
+  padding: 10px 18px; border-radius: 9px; border: 0; cursor: pointer; font: inherit; font-weight: 700;
+  color: #04121a; background: linear-gradient(90deg, var(--cyan), #7ffcff);
+}
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+button.ghost:hover { border-color: var(--cyan); }
+#demo { margin-top: 10px; width: 100%; }
+
+.note { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+.row label { display: flex; gap: 6px; align-items: center; }
+.check { font-size: 14px; color: var(--muted); }
+
+.help { max-width: 560px; color: var(--muted); font-size: 14px; text-align: center; }
+kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font: 12px ui-monospace, monospace; color: var(--text); }
+.c-pulse { color: #7ffcff; } .c-shard { color: var(--red); } .c-surge { color: var(--gold); }
+
+.spinner {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--cyan);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* HUD */
+#hud { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+.hud-left { position: absolute; top: 14px; left: 16px; max-width: 45vw; }
+#song-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 8px #000; }
+.badge { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 99px; font-size: 12px;
+  border: 1px solid var(--line); color: var(--muted); background: rgba(0, 0, 0, 0.4); }
+.hud-right { position: absolute; top: 10px; right: 64px; text-align: right; }
+.score-label { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+#score { font-size: clamp(26px, 6vw, 40px); font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(56, 232, 255, 0.6); }
+.flow-row { font-size: 14px; color: var(--muted); }
+.flow-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+#mult { color: var(--cyan); font-weight: 700; }
+#surge {
+  position: absolute; top: 74px; left: 50%; transform: translateX(-50%);
+  font-weight: 900; letter-spacing: 0.15em; color: var(--gold);
+  text-shadow: 0 0 14px rgba(255, 211, 77, 0.8); animation: pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+#pause-btn {
+  position: absolute; top: 12px; right: 12px; pointer-events: auto;
+  width: 40px; height: 40px; padding: 0; border-radius: 50%; font-size: 13px;
+  background: rgba(0, 0, 0, 0.45); color: var(--text); border: 1px solid var(--line);
+}
+#progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.08); }
+#progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--pink)); }
+#countdown {
+  display: none; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 96px; font-weight: 900; color: var(--text); text-shadow: 0 0 24px var(--cyan);
+}
+body[data-state="countdown"] #countdown { display: block; }
+
+#flash { position: fixed; inset: 0; z-index: 4; pointer-events: none; background: var(--red); opacity: 0; }
+#flash.on { animation: flash 0.35s ease-out; }
+@keyframes flash { from { opacity: 0.35; } to { opacity: 0; } }
+
+/* Results / pause */
+#results .big { font-size: clamp(48px, 12vw, 84px); font-weight: 900; text-shadow: 0 0 24px rgba(56, 232, 255, 0.6); }
+.muted { color: var(--muted); margin: 0; }
+.best { color: var(--gold); margin: 0; font-weight: 700; }
+dl { display: grid; grid-template-columns: auto auto; gap: 6px 24px; margin: 8px 0 12px; }
+dt { color: var(--muted); } dd { margin: 0; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* YouTube player: shown while loading, then in a corner during the ride.
+   The YouTube API terms require the player to stay visible (min 200x200). */
+#yt { position: fixed; z-index: 20; right: 16px; bottom: 16px; width: 240px; }
+#yt[hidden] { display: none; }
+#yt-player { width: 240px; height: 200px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: #000; }
+#yt-player iframe { width: 100%; height: 100%; display: block; }
+.yt-note { display: none; font-size: 11px; color: var(--muted); }
+#yt.corner .yt-note { display: block; }
+body[data-state="results"] #yt, body[data-state="menu"] #yt { display: none; }
+
+#tap-start {
+  position: fixed; z-index: 30; left: 50%; top: 55%; transform: translateX(-50%);
+  box-shadow: 0 0 24px rgba(56, 232, 255, 0.6);
+}
+#tap-start[hidden] { display: none; }
+
+#toast {
+  position: fixed; z-index: 40; left: 50%; bottom: 24px; transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 10px;
+  background: rgba(20, 16, 40, 0.95); border: 1px solid var(--line); font-size: 14px;
+}
+#toast[hidden] { display: none; }
+
+@media (max-width: 600px) {
+  #yt, #yt-player { width: 200px; }
+  .hud-right { right: 60px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #surge { animation: none; }
+  #flash.on { animation-duration: 0.01s; }
+}

@@ -19,8 +19,12 @@ nixos/web.nix                nginx: serves srv/ over http on port 80 (LAN, Tails
 nixos/tunnel.nix             Cloudflare Tunnel: https://labs.ghuntley.com -> nginx (ISP is CGNAT)
 nixos/modules/auto-update.nix  pull-based auto-deploy (systemd timer)
 packages/site.nix            packages srv/ as a derivation
+packages/surf.nix            packages games/surf/ (served at /surf/)
 srv/                         static site content (index.html, ...)
-devenv.nix                   dev shell: scripts, formatter, git hooks
+games/surf/                  surf: music-driven track racer (plain ES modules + three.js)
+tests/surf/                  Bombadil spec (spec.ts) + node unit tests + local server
+devenv.nix                   dev shell: node, typescript, rust, chromium, bombadil, scripts
+AGENTS.md                    rules for coding agents (Bombadil for property-based testing)
 ```
 
 ## Workflow
@@ -35,6 +39,8 @@ devenv.nix                   dev shell: scripts, formatter, git hooks
 | `nixos-update`      | `nix flake update` (bump nixpkgs)                         |
 | `autoupdate-status` | timer schedule, running revision, recent deploy logs      |
 | `autoupdate-now`    | trigger a pull and deploy immediately                     |
+| `serve-surf`        | serve srv/ and games/surf/ at http://localhost:8000/surf/ |
+| `test-surf`         | node unit tests + Bombadil properties against serve-surf  |
 
 Normally you just commit and push to `trunk`. The machine deploys the change itself.
 

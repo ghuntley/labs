@@ -6,6 +6,7 @@
 
 let
   site = pkgs.callPackage ../packages/site.nix { };
+  surf = pkgs.callPackage ../packages/surf.nix { };
 in
 {
   services.nginx = {
@@ -25,6 +26,9 @@ in
     virtualHosts.default = {
       default = true;
       root = site;
+      # games/surf/ (packages/surf.nix)
+      locations."= /surf".return = "301 /surf/";
+      locations."/surf/".alias = "${surf}/";
     };
   };
 

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>surf</title>
+  <meta name="description" content="Ride a neon track built from your music. Local audio files or YouTube links.">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" } }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body data-state="boot">
+  <canvas id="game" aria-label="Game view"></canvas>
+  <div id="flash"></div>
+
+  <main id="menu" class="panel">
+    <h1 class="logo">surf</h1>
+    <p class="tag">Your music builds the track. Ride it.</p>
+
+    <section class="card">
+      <h2>Play a song file</h2>
+      <label id="drop" class="drop">
+        <input id="file" type="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a,.opus">
+        <span>Drop an audio file here or <u>choose one</u></span>
+        <small>Analysed in your browser. Nothing is uploaded.</small>
+      </label>
+      <button id="demo" type="button" class="ghost">Or try the built-in demo groove</button>
+    </section>
+
+    <section class="card">
+      <h2>Play a YouTube link</h2>
+      <form id="yt-form">
+        <input id="yt-url" type="url" inputmode="url" placeholder="https://youtu.be/…" autocomplete="off" required>
+        <button id="yt-go" type="submit">Ride</button>
+      </form>
+      <p id="capture-note" class="note"></p>
+      <details>
+        <summary>Tempo mode</summary>
+        <p class="note">Used when tab audio can’t be shared: the track follows a fixed tempo instead of the song.</p>
+        <div class="row">
+          <label>BPM <input id="bpm" type="number" min="40" max="240" value="120"></label>
+          <button id="tap" type="button" class="ghost">Tap the beat</button>
+          <label class="check"><input id="force-tempo" type="checkbox"> Always use tempo mode</label>
+        </div>
+      </details>
+    </section>
+
+    <section class="help">
+      <p><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> to change lane · mouse to steer · swipe or tap on touch · <kbd>P</kbd> to pause</p>
+      <p>Catch <b class="c-pulse">pulses</b> to build flow. Dodge <b class="c-shard">shards</b>. Loud stretches <b class="c-surge">surge</b> for double points.</p>
+    </section>
+  </main>
+
+  <div id="loading" class="panel center">
+    <div class="spinner"></div>
+    <p id="status-text">Loading…</p>
+  </div>
+
+  <div id="hud">
+    <div class="hud-left">
+      <div id="song-title"></div>
+      <div id="mode" class="badge"></div>
+    </div>
+    <div class="hud-right">
+      <div class="score-label">score</div>
+      <div id="score">0</div>
+      <div class="flow-row"><span>flow</span> <b id="flow">0</b> <span id="mult">×1</span></div>
+    </div>
+    <div id="surge" hidden>SURGE ×2</div>
+    <button id="pause-btn" type="button" aria-label="Pause">❚❚</button>
+    <div id="progress"><div id="progress-bar"></div></div>
+    <div id="countdown"></div>
+  </div>
+
+  <div id="paused" class="panel center">
+    <h2>Paused</h2>
+    <button id="resume" type="button">Resume</button>
+    <button id="quit" type="button" class="ghost">Quit to menu</button>
+  </div>
+
+  <div id="results" class="panel center">
+    <p id="r-title" class="muted"></p>
+    <div id="r-score" class="big"></div>
+    <p id="r-best" class="best"></p>
+    <dl>
+      <dt>Accuracy</dt><dd id="r-acc"></dd>
+      <dt>Pulses</dt><dd id="r-pulses"></dd>
+      <dt>Best flow</dt><dd id="r-flow"></dd>
+      <dt>Shards hit</dt><dd id="r-shards"></dd>
+    </dl>
+    <button id="again" type="button">Back to menu</button>
+  </div>
+
+  <div id="yt" hidden><div id="yt-player"></div><span class="yt-note">Video runs ahead of the sound</span></div>
+  <button id="tap-start" type="button" hidden>Tap to start the music</button>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>
