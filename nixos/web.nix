@@ -1,28 +1,26 @@
-# nginx serving the static site from srv/.
-#   https://labs.ghuntley.com  Let's Encrypt cert (HTTP-01); http redirects to https
-#   http://<any other name/IP> default vhost, e.g. LAN or Tailscale IP
+# nginx serving the static site from srv/ over plain http on port 80.
+#   https://labs.ghuntley.com  via Cloudflare Tunnel (see tunnel.nix);
+#                              Cloudflare terminates TLS at its edge
+#   http://<LAN/Tailscale IP>  directly
 { pkgs, ... }:
 
 let
   site = pkgs.callPackage ../packages/site.nix { };
 in
 {
-  security.acme = {
-    acceptTerms = true;
-    defaults.email = "ghuntley@ghuntley.com";
-  };
-
   services.nginx = {
     enable = true;
     recommendedGzipSettings = true;
     recommendedOptimisation = true;
-    recommendedTlsSettings = true;
 
-    virtualHosts."labs.ghuntley.com" = {
-      enableACME = true;
-      forceSSL = true;
-      root = site;
-    };
+    # Tunnel traffic arrives from cloudflared on localhost; log the real
+    # visitor address instead. Only localhost is trusted, so LAN clients
+    # cannot spoof the header.
+    commonHttpConfig = ''
+      set_real_ip_from 127.0.0.1;
+      set_real_ip_from ::1;
+      real_ip_header CF-Connecting-IP;
+    '';
 
     virtualHosts.default = {
       default = true;
@@ -30,8 +28,7 @@ in
     };
   };
 
-  networking.firewall.allowedTCPPorts = [
-    80
-    443
-  ];
+  # LAN and Tailscale only; the ISP uses CGNAT, so nothing reaches this
+  # machine inbound from the internet anyway.
+  networking.firewall.allowedTCPPorts = [ 80 ];
 }

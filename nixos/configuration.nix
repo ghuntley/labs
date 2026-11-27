@@ -14,7 +14,7 @@
     ./packages.nix
     ./dev.nix
     ./web.nix
-    ./ddns.nix
+    ./tunnel.nix
     ./modules/auto-update.nix
   ];
 
