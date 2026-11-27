@@ -7,7 +7,7 @@ flake.nix                    nixosConfigurations.labs-ghuntley-com (nixpkgs pinn
 nixos/configuration.nix      entry point: imports + stateVersion
 nixos/hardware-configuration.nix
 nixos/boot.nix               GRUB
-nixos/networking.nix         hostname, NetworkManager, Tailscale
+nixos/networking.nix         hostname, static IP 10.10.10.250, NetworkManager, Tailscale
 nixos/ssh.nix                key-only OpenSSH, mosh
 nixos/locale.nix             timezone, locale
 nixos/desktop.nix            XFCE, PipeWire, printing, Firefox
