@@ -3,11 +3,20 @@
 This repo holds the whole system configuration for this machine as a flake. devenv provides the tooling around it.
 
 ```
-flake.nix                         nixosConfigurations.labs-ghuntley-com (nixpkgs pinned in flake.lock)
-hosts/nixos/configuration.nix     main config (was /etc/nixos/configuration.nix)
-hosts/nixos/hardware-configuration.nix
-nixos/modules/auto-update.nix     pull-based auto-deploy (systemd timer)
-devenv.nix                        dev shell: scripts, formatter, git hooks
+flake.nix                    nixosConfigurations.labs-ghuntley-com (nixpkgs pinned in flake.lock)
+nixos/configuration.nix      entry point: imports + stateVersion
+nixos/hardware-configuration.nix
+nixos/boot.nix               GRUB
+nixos/networking.nix         hostname, NetworkManager, Tailscale
+nixos/ssh.nix                key-only OpenSSH, mosh
+nixos/locale.nix             timezone, locale
+nixos/desktop.nix            XFCE, PipeWire, printing, Firefox
+nixos/users.nix              users, SSH keys, sudo
+nixos/nix.nix                nix settings, allowUnfree
+nixos/packages.nix           system packages, neovim, tmux
+nixos/dev.nix                nix-ld, vscode-server
+nixos/modules/auto-update.nix  pull-based auto-deploy (systemd timer)
+devenv.nix                   dev shell: scripts, formatter, git hooks
 ```
 
 ## Workflow

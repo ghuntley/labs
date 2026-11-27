@@ -18,7 +18,7 @@
       labs = nixpkgs.lib.nixosSystem {
         modules = [
           vscode-server.nixosModules.default
-          ./hosts/nixos/configuration.nix
+          ./nixos/configuration.nix
           {
             system.configurationRevision = self.rev or self.dirtyRev or "unknown";
           }
