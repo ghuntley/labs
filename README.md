@@ -15,7 +15,8 @@ nixos/users.nix              users, SSH keys, sudo
 nixos/nix.nix                nix settings, allowUnfree
 nixos/packages.nix           system packages, neovim, tmux
 nixos/dev.nix                nix-ld, vscode-server
-nixos/web.nix                nginx on :80 serving the site
+nixos/web.nix                nginx: https://labs.ghuntley.com (ACME) + http default vhost
+nixos/ddns.nix               Cloudflare DDNS for labs.ghuntley.com (token in /var/lib/secrets)
 nixos/modules/auto-update.nix  pull-based auto-deploy (systemd timer)
 packages/site.nix            packages srv/ as a derivation
 srv/                         static site content (index.html, ...)
