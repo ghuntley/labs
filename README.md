@@ -23,7 +23,6 @@ packages/surf.nix            packages games/surf/ (served at /surf/)
 srv/                         static site content (index.html, art/, ...)
 games/surf/                  surf: music-driven track racer (plain ES modules + three.js)
 tests/surf/                  Bombadil spec (spec.ts) + node unit tests + local server
-tests/art/                   Bombadil specs + unit tests for /art/ and thin film
 devenv.nix                   dev shell: node, typescript, rust, chromium, bombadil, scripts
 AGENTS.md                    rules for coding agents (Bombadil for property-based testing)
 ```
@@ -42,7 +41,6 @@ AGENTS.md                    rules for coding agents (Bombadil for property-base
 | `autoupdate-now`    | trigger a pull and deploy immediately                     |
 | `serve-surf`        | serve srv/ and games/surf/ at http://localhost:8000/surf/ |
 | `test-surf`         | node unit tests + Bombadil properties against serve-surf  |
-| `test-art`          | node unit tests + Bombadil properties for /art/           |
 
 Normally you just commit and push to `trunk`. The machine deploys the change itself.
 

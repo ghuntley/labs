@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#05070a">
   <title>thin film — labs.ghuntley.com</title>
   <style>
+
     :root {
       color-scheme: dark;
       --fg: #e9ffe8;
@@ -210,18 +211,40 @@
       color: var(--fg);
       font-variant-numeric: tabular-nums;
     }
+    #scene-chip {
+      color: var(--accent3);
+      letter-spacing: 0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+    #hud.collapsed #scene-chip { margin-left: 0; }
+    #scene-num {
+      flex: 1;
+      text-align: center;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+    }
+    .row.scene-row { gap: 0.35rem; }
+    .row.scene-row label {
+      flex: 0 0 auto;
+      color: var(--muted);
+      gap: 0.3rem;
+    }
+    .row.scene-row input[type="checkbox"] { accent-color: var(--accent); }
+
   </style>
 </head>
-<body data-ready="0" data-renderer="" data-seed="" data-audio="off" data-hud="open" data-fps="0" data-bass="0" data-mid="0" data-high="0" data-beat="0" data-gl-error="">
+<body data-ready="0" data-renderer="" data-seed="" data-audio="off" data-hud="closed" data-fps="0" data-bass="0" data-mid="0" data-high="0" data-beat="0" data-scene="0" data-scene-auto="1" data-gl-error="">
   <canvas id="c" tabindex="-1"></canvas>
-  <div id="hint">click or press space to start the synth</div>
+  <div id="hint">click or press any key to start the synth</div>
   <pre id="gl-error" hidden></pre>
-  <aside id="hud" aria-label="Controls">
+  <aside id="hud" class="collapsed" aria-label="Controls">
     <div class="hud-top">
       <strong>thin film</strong>
+      <span id="scene-chip">#1</span>
       <a id="back" href="/art/">art</a>
       <span id="fps" aria-live="off">0 fps</span>
-      <button id="hud-toggle" type="button" title="Toggle controls (H)" aria-expanded="true" aria-controls="hud-body">hide</button>
+      <button id="hud-toggle" type="button" title="Toggle controls (H)" aria-expanded="false" aria-controls="hud-body">H</button>
     </div>
     <div id="hud-body" class="hud-body">
       <div class="section">audio</div>
@@ -233,13 +256,20 @@
         <label><span>Volume</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="volume-val">0.72</i></label>
       </div>
       <div class="row">
-        <label><span>BPM</span><input id="bpm" type="range" min="80" max="180" step="1" value="132"><i class="val" id="bpm-val">132</i></label>
+        <label><span>BPM</span><input id="bpm" type="range" min="80" max="180" step="1" value="136"><i class="val" id="bpm-val">136</i></label>
       </div>
       <div class="row">
         <label><span>Acid cutoff</span><input id="cutoff" type="range" min="0" max="1" step="0.01" value="0.42"><i class="val" id="cutoff-val">0.42</i></label>
       </div>
       <div class="row">
         <label><span>Resonance</span><input id="resonance" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="resonance-val">0.72</i></label>
+      </div>
+      <div class="section">scene</div>
+      <div class="row scene-row">
+        <button id="scene-prev" type="button" title="Previous scene ([)">prev</button>
+        <span id="scene-num">#1</span>
+        <button id="scene-next" type="button" title="Next scene (])">next</button>
+        <label><input id="scene-auto" type="checkbox" checked> Auto</label>
       </div>
       <div class="section">seed</div>
       <div class="row">
@@ -263,10 +293,11 @@
         <label><span>Chromatic</span><input id="glitch" type="range" min="0" max="2" step="0.01" value="0.28"><i class="val" id="glitch-val">0.28</i></label>
       </div>
       <canvas id="spectrum" width="320" height="36" aria-label="Audio spectrum"></canvas>
-      <p class="keys">H hud · Space audio · R seed · F fullscreen</p>
+      <p class="keys">H hud · Space audio · R seed · [ ] scene · F fullscreen</p>
     </div>
   </aside>
   <script id="art-logic">
+
 var ArtLogic = (function () {
   "use strict";
 
@@ -377,8 +408,8 @@ var ArtLogic = (function () {
     midiToFreq: midiToFreq
   };
 })();
+  
   </script>
-
   <script id="art-main">
 (function () {
   "use strict";
@@ -386,13 +417,15 @@ var ArtLogic = (function () {
   var L = ArtLogic;
   var canvas = document.getElementById("c");
   var hud = document.getElementById("hud");
-  var hudBody = document.getElementById("hud-body");
   var hudToggle = document.getElementById("hud-toggle");
   var audioToggle = document.getElementById("audio-toggle");
   var hint = document.getElementById("hint");
   var glError = document.getElementById("gl-error");
   var fpsEl = document.getElementById("fps");
   var seedInput = document.getElementById("seed");
+  var sceneNum = document.getElementById("scene-num");
+  var sceneChip = document.getElementById("scene-chip");
+  var sceneAutoEl = document.getElementById("scene-auto");
   var specCanvas = document.getElementById("spectrum");
   var specCtx = specCanvas.getContext("2d");
 
@@ -409,8 +442,15 @@ var ArtLogic = (function () {
   };
 
   var seedState = { display: "1", value: 1 };
-  var hudOpen = true;
+  var hudOpen = false;
   var audioOn = false;
+  var unlockBound = false;
+  var sceneIndex = 0;
+  var sceneAuto = true;
+  var sceneStartBeat = 0;
+  var sceneHoldBars = 8;
+  var sceneFadeBars = 1;
+  var sceneCross = 0;
   var mouse = [0, 0];
   var mouseT = [0, 0];
   var startMs = performance.now();
@@ -419,170 +459,338 @@ var ArtLogic = (function () {
   var visual = { bass: 0, mid: 0, high: 0, beat: 0 };
 
   var FS_SOURCE = [
-    "precision highp float;",
-    "uniform vec2 uRes;",
-    "uniform float uTime, uBeat, uBass, uMid, uHigh;",
-    "uniform float uSeed, uSpeed, uWarp, uIrid, uReact, uGlitch;",
-    "uniform vec2 uMouse;",
-    "uniform sampler2D uFreq;",
-    "",
-    "const float PI = 3.14159265359;",
-    "const float TAU = 6.28318530718;",
-    "",
-    "float hash11(float n) {",
-    "  return fract(sin(n + uSeed * 0.00013) * 43758.5453123);",
-    "}",
-    "float hash21(vec2 p) {",
-    "  return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 0.00011) * 43758.5453);",
-    "}",
-    "float noise(vec2 p) {",
-    "  vec2 i = floor(p);",
-    "  vec2 f = fract(p);",
-    "  f = f * f * (3.0 - 2.0 * f);",
-    "  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),",
-    "             mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);",
-    "}",
-    "float fbm(vec2 p) {",
-    "  float a = 0.0;",
-    "  float b = 0.5;",
-    "  for (int i = 0; i < 4; i++) {",
-    "    a += b * noise(p);",
-    "    p = p * 2.07 + 13.17;",
-    "    b *= 0.5;",
-    "  }",
-    "  return a;",
-    "}",
-    "mat2 rot(float a) {",
-    "  float c = cos(a), s = sin(a);",
-    "  return mat2(c, s, -s, c);",
-    "}",
-    "float sdTorus(vec3 p, vec2 t) {",
-    "  vec2 q = vec2(length(p.xz) - t.x, p.y);",
-    "  return length(q) - t.y;",
-    "}",
-    "float sdOcta(vec3 p, float s) {",
-    "  p = abs(p);",
-    "  return (p.x + p.y + p.z - s) * 0.57735027;",
-    "}",
-    "vec3 pal(float t) {",
-    "  vec3 a = vec3(0.50, 0.47, 0.50);",
-    "  vec3 b = vec3(0.50, 0.52, 0.45);",
-    "  vec3 c = vec3(1.00, 0.92, 0.80);",
-    "  vec3 d = vec3(0.00, 0.33, 0.67);",
-    "  return a + b * cos(TAU * (c * t + d + uIrid * 0.15));",
-    "}",
-    "",
-    "float gMat;",
-    "float map(vec3 p) {",
-    "  float t = uTime * uSpeed;",
-    "  float react = uReact;",
-    "  float bass = uBass * react;",
-    "  float md = uMid * react;",
-    "  float hi = uHigh * react;",
-    "  p.z += t * (2.15 + bass * 1.35);",
-    "  p.xy += uMouse * 0.38;",
-    "  p.xy *= rot(p.z * 0.065 + t * 0.14 + uSeed * 0.00007);",
-    "  vec2 wv = vec2(",
-    "    fbm(vec2(p.z * 0.28, p.x * 0.55) * (0.55 + uWarp * 0.5) + t * 0.11),",
-    "    fbm(vec2(p.z * 0.26, p.y * 0.55) * (0.55 + uWarp * 0.5) - t * 0.09)",
-    "  );",
-    "  p.xy += (wv - 0.5) * (0.62 * uWarp + md * 0.32);",
-    "  float ang = atan(p.y, p.x);",
-    "  float freq = SAMPLE(uFreq, vec2(fract(ang / TAU + 0.5), 0.5)).r;",
-    "  float R = 1.20 + 0.16 * sin(p.z * 0.42 + t) + bass * 0.26 + freq * 0.10 * react;",
-    "  float tun = R - length(p.xy);",
-    "  float ribs = length(p.xy) - (R - 0.07);",
-    "  float ring = abs(fract(p.z * 0.32 + t * 0.04) - 0.5) - 0.035;",
-    "  ribs = max(ribs, ring);",
-    "  vec3 c = p;",
-    "  c.z = mod(p.z, 3.0) - 1.5;",
-    "  c.xy *= rot(t * 0.55 + floor((p.z + 1000.0) / 3.0));",
-    "  float crystal = sdOcta(c, 0.20 + 0.13 * bass + 0.06 * sin(t * 2.1 + uSeed));",
-    "  vec3 kt = p;",
-    "  kt.xy *= rot(t * 0.38);",
-    "  kt.z = mod(p.z, 4.2) - 2.1;",
-    "  kt.yz *= rot(t * 0.28 + md);",
-    "  kt.xz *= rot(0.7 + t * 0.1);",
-    "  float torus = sdTorus(kt, vec2(0.40 + 0.12 * md, 0.065 + 0.04 * hi));",
-    "  float d = tun;",
-    "  gMat = 0.0;",
-    "  if (ribs < d) { d = ribs; gMat = 1.0; }",
-    "  if (crystal < d) { d = crystal; gMat = 2.0; }",
-    "  if (torus < d) { d = torus; gMat = 3.0; }",
-    "  return d;",
-    "}",
-    "vec3 nrm(vec3 p) {",
-    "  float e = 0.0016;",
-    "  vec2 h = vec2(e, 0.0);",
-    "  return normalize(vec3(",
-    "    map(p + h.xyy) - map(p - h.xyy),",
-    "    map(p + h.yxy) - map(p - h.yxy),",
-    "    map(p + h.yyx) - map(p - h.yyx)",
-    "  ));",
-    "}",
-    "vec3 render(vec2 uv) {",
-    "  float t = uTime * uSpeed;",
-    "  vec3 ro = vec3(0.0, 0.0, -0.15);",
-    "  vec3 rd = normalize(vec3(uv, 1.32));",
-    "  rd.xy = rot(uMouse.x * 0.18) * rd.xy;",
-    "  rd.xz = rot(uMouse.y * 0.14) * rd.xz;",
-    "  float trav = 0.0;",
-    "  vec3 p;",
-    "  bool hit = false;",
-    "  for (int i = 0; i < 52; i++) {",
-    "    p = ro + rd * trav;",
-    "    float d = map(p);",
-    "    if (d < 0.001 * trav + 0.0008) { hit = true; break; }",
-    "    trav += d * 0.86;",
-    "    if (trav > 26.0) break;",
-    "  }",
-    "  float pl = fbm(uv * 2.4 + t * 0.14);",
-    "  float pl2 = fbm(uv * 5.2 - t * 0.09 + 8.0);",
-    "  vec3 col = pal(pl * 0.7 + uIrid + uBeat * 0.04) * 0.11;",
-    "  col += pal(pl2 + 0.45) * 0.055 * (0.4 + uHigh * uReact);",
-    "  if (hit) {",
-    "    vec3 n = nrm(p);",
-    "    vec3 lgt = normalize(vec3(0.45, 0.62, -0.48));",
-    "    float diff = clamp(dot(n, lgt), 0.0, 1.0);",
-    "    float fre = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.15);",
-    "    float thick = 2.1 + uIrid * 3.8 + uMid * uReact * 1.4;",
-    "    vec3 film = pal(fre * thick + uIrid + gMat * 0.19 + uTime * 0.045 + uBass * uReact * 0.2);",
-    "    vec3 base = mix(vec3(0.05, 0.06, 0.08), film, 0.88);",
-    "    base *= 0.22 + 0.9 * diff;",
-    "    base += film * fre * (0.72 + uIrid * 0.55);",
-    "    if (gMat > 1.5 && gMat < 2.5) base += pal(uTime * 0.2 + fre) * 0.32;",
-    "    if (gMat > 2.5) base += vec3(1.0, 0.86, 0.32) * fre * 0.38;",
-    "    if (gMat > 0.5 && gMat < 1.5) base += pal(0.15 + fre) * 0.12;",
-    "    float fog = 1.0 - exp(-trav * 0.085);",
-    "    col = mix(base, col, clamp(fog, 0.0, 1.0));",
-    "    col += film * 0.11 / (1.0 + trav * 0.16);",
-    "  } else {",
-    "    col += pal(uBeat + uIrid) * 0.05 * uBass * uReact;",
-    "  }",
-    "  float glow = 0.11 / (0.16 + dot(uv, uv));",
-    "  col += pal(0.12 + uIrid + uBeat) * glow * (0.14 + 0.36 * uBass * uReact);",
-    "  return col;",
-    "}",
-    "void main() {",
-    "  vec2 fragCoord = gl_FragCoord.xy;",
-    "  vec2 uv = (fragCoord - 0.5 * uRes) / min(uRes.y, uRes.x);",
-    "  float g = uGlitch * (0.35 + uHigh * uReact);",
-    "  float kick = exp(-fract(uBeat) * 8.0);",
-    "  float aberr = (0.0035 + 0.014 * g) * (1.0 + kick);",
-    "  float slice = step(0.965, hash21(vec2(floor(uv.y * 42.0), floor(uTime * 10.0))));",
-    "  uv.x += slice * (hash21(vec2(floor(uTime * 10.0), 2.3)) - 0.5) * 0.16 * g;",
-    "  vec3 col = render(uv);",
-    "  col.r = mix(col.r, render(uv + vec2(aberr, 0.0)).r, 0.85);",
-    "  col.b = mix(col.b, render(uv - vec2(aberr, 0.02 * aberr)).b, 0.85);",
-    "  float scan = 0.88 + 0.12 * sin(fragCoord.y * 2.15);",
-    "  col *= scan;",
-    "  vec2 q = fragCoord / uRes;",
-    "  col *= 0.32 + 0.68 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.34);",
-    "  col += (hash21(fragCoord + vec2(uTime * 0.1, uTime)) - 0.5) * 0.035;",
-    "  col = col / (1.0 + col * 0.35);",
-    "  col = pow(max(col, 0.0), vec3(0.86));",
-    "  fragColor = vec4(col, 1.0);",
-    "}"
+    'precision highp float;',
+    'uniform vec2 uRes;',
+    'uniform float uTime, uBeat, uBass, uMid, uHigh;',
+    'uniform float uSeed, uSpeed, uWarp, uIrid, uReact, uGlitch;',
+    'uniform float uScene, uCross;',
+    'uniform vec2 uMouse;',
+    'uniform sampler2D uFreq;',
+    '',
+    'const float PI = 3.14159265359;',
+    'const float TAU = 6.28318530718;',
+    '',
+    'float gTrap;',
+    'float hash11(float n) {',
+    '  return fract(sin(n + uSeed * 0.00013) * 43758.5453123);',
+    '}',
+    'vec4 hash41(float n) {',
+    '  return fract(sin(vec4(n, n + 1.73, n + 3.11, n + 5.27) + uSeed * 0.00011) *',
+    '               vec4(43758.5453, 22453.643, 19642.431, 31415.926));',
+    '}',
+    'float hash21(vec2 p) {',
+    '  return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 0.00011) * 43758.5453);',
+    '}',
+    'float noise(vec2 p) {',
+    '  vec2 i = floor(p);',
+    '  vec2 f = fract(p);',
+    '  f = f * f * (3.0 - 2.0 * f);',
+    '  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),',
+    '             mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);',
+    '}',
+    'float fbm(vec2 p) {',
+    '  float a = 0.0;',
+    '  float b = 0.5;',
+    '  for (int i = 0; i < 4; i++) {',
+    '    a += b * noise(p);',
+    '    p = p * 2.07 + 13.17;',
+    '    b *= 0.5;',
+    '  }',
+    '  return a;',
+    '}',
+    'mat2 rot(float a) {',
+    '  float c = cos(a), s = sin(a);',
+    '  return mat2(c, s, -s, c);',
+    '}',
+    'float smin(float a, float b, float k) {',
+    '  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);',
+    '  return mix(b, a, h) - k * h * (1.0 - h);',
+    '}',
+    'float sdTorus(vec3 p, vec2 t) {',
+    '  vec2 q = vec2(length(p.xz) - t.x, p.y);',
+    '  return length(q) - t.y;',
+    '}',
+    'vec3 pal(float t) {',
+    '  vec3 a = vec3(0.50, 0.47, 0.50);',
+    '  vec3 b = vec3(0.50, 0.52, 0.45);',
+    '  vec3 c = vec3(1.00, 0.92, 0.80);',
+    '  vec3 d = vec3(0.00, 0.33, 0.67);',
+    '  return a + b * cos(TAU * (c * t + d + uIrid * 0.15));',
+    '}',
+    '',
+    'void gene(float idx, out vec4 p0, out vec4 p1, out vec4 p2, out vec4 p3) {',
+    '  float n = idx + 0.17;',
+    '  p0 = hash41(n * 3.17 + 1.11);',
+    '  p1 = hash41(n * 5.09 + 7.31);',
+    '  p2 = hash41(n * 8.51 + 13.93);',
+    '  p3 = hash41(n * 11.27 + 21.53);',
+    '}',
+    '',
+    'float mapFam(vec3 p, float fam, vec4 p1, vec4 p2) {',
+    '  float fold = p1.x * TAU;',
+    '  float sym = 3.0 + floor(p1.y * 6.0);',
+    '  float sc = mix(1.45, 2.2, p1.z);',
+    '  float power = mix(4.0, 8.0, p1.w);',
+    '  vec3 off = vec3(p2.x, p2.y, p2.z) * 1.6 + 0.35;',
+    '  float d = 1e5;',
+    '',
+    '  if (fam < 0.5) {',
+    '    float amp = 1.0;',
+    '    vec3 z = p;',
+    '    for (int i = 0; i < 8; i++) {',
+    '      z = abs(z);',
+    '      if (z.x < z.y) z.xy = z.yx;',
+    '      if (z.x < z.z) z.xz = z.zx;',
+    '      if (z.y < z.z) z.yz = z.zy;',
+    '      z.xy *= rot(fold);',
+    '      z = z * sc - off * (sc - 1.0);',
+    '      amp *= sc;',
+    '      gTrap = min(gTrap, length(z));',
+    '    }',
+    '    d = length(z) / amp - 0.015;',
+    '  } else if (fam < 1.5) {',
+    '    vec3 z = p;',
+    '    float dr = 1.0;',
+    '    float r = 0.0;',
+    '    for (int i = 0; i < 8; i++) {',
+    '      r = length(z);',
+    '      if (r > 6.0) break;',
+    '      float theta = acos(clamp(z.z / max(r, 1e-4), -1.0, 1.0));',
+    '      float phi = atan(z.y, z.x);',
+    '      dr = pow(r, power - 1.0) * power * dr + 1.0;',
+    '      float zr = pow(r, power);',
+    '      theta *= power;',
+    '      phi *= power;',
+    '      z = zr * vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)) + p * 0.85;',
+    '      gTrap = min(gTrap, r);',
+    '    }',
+    '    d = 0.5 * log(max(r, 1e-4)) * r / dr;',
+    '  } else if (fam < 2.5) {',
+    '    vec3 z = p;',
+    '    float amp = 1.0;',
+    '    for (int i = 0; i < 7; i++) {',
+    '      z = abs(z);',
+    '      if (z.x < z.y) z.xy = z.yx;',
+    '      if (z.x < z.z) z.xz = z.zx;',
+    '      if (z.y < z.z) z.yz = z.zy;',
+    '      z = z * 3.0 - vec3(2.0, 2.0, 2.0) * off.x;',
+    '      if (z.z > 1.0 * off.y + 0.5) z.z -= 2.0 * (off.y + 0.5);',
+    '      amp *= 3.0;',
+    '      gTrap = min(gTrap, length(z));',
+    '    }',
+    '    d = (max(z.x, max(z.y, z.z)) - 1.0) / amp;',
+    '  } else if (fam < 3.5) {',
+    '    vec3 z = p;',
+    '    float amp = 1.0;',
+    '    for (int i = 0; i < 8; i++) {',
+    '      if (z.x + z.y < 0.0) z.xy = -z.yx;',
+    '      if (z.x + z.z < 0.0) z.xz = -z.zx;',
+    '      if (z.y + z.z < 0.0) z.yz = -z.zy;',
+    '      z = z * sc + off * 0.15;',
+    '      amp *= sc;',
+    '      gTrap = min(gTrap, length(z));',
+    '    }',
+    '    d = length(z) / amp - 0.02;',
+    '  } else if (fam < 4.5) {',
+    '    vec3 z = p;',
+    '    float amp = 1.0;',
+    '    float s = mix(0.9, 1.4, off.x * 0.5 + 0.5);',
+    '    for (int i = 0; i < 8; i++) {',
+    '      z = 2.0 * clamp(z, -off, off) - z;',
+    '      float k = max(s / max(dot(z, z), 0.05), 0.05);',
+    '      z *= k;',
+    '      amp *= k;',
+    '      gTrap = min(gTrap, length(z));',
+    '    }',
+    '    d = 0.25 * (length(z) - s) / max(amp, 1e-3);',
+    '  } else if (fam < 5.5) {',
+    '    vec2 z = abs(p.xz);',
+    '    vec2 c = (p2.xy - 0.5) * 1.4;',
+    '    float r = 0.0;',
+    '    for (int i = 0; i < 10; i++) {',
+    '      z = abs(z);',
+    '      z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;',
+    '      r = length(z);',
+    '      if (r > 8.0) break;',
+    '      gTrap = min(gTrap, r);',
+    '    }',
+    '    d = 0.4 * (r - 2.0) / 8.0 + 0.15 * abs(p.y) - 0.05;',
+    '  } else if (fam < 6.5) {',
+    '    vec3 z = p;',
+    '    float amp = 1.0;',
+    '    float s = mix(0.7, 1.3, p1.z);',
+    '    for (int i = 0; i < 8; i++) {',
+    '      z = abs(z + off * 0.4) - off * 0.4;',
+    '      float k = s / max(dot(z, z), 0.08);',
+    '      z = z * k + p * 0.15;',
+    '      amp *= k;',
+    '      z.xy *= rot(fold * 0.25);',
+    '      gTrap = min(gTrap, length(z));',
+    '    }',
+    '    d = 0.3 * length(z) / max(amp, 1e-3) - 0.01;',
+    '  } else if (fam < 7.5) {',
+    '    vec3 z = p;',
+    '    z.xz *= rot(z.y * (1.0 + p1.x * 4.0) + uTime * uSpeed * 0.2);',
+    '    z.xy *= rot(fold);',
+    '    float tw = 0.35 + p1.y * 0.35;',
+    '    d = sdTorus(z, vec2(0.7 + p2.x * 0.3, tw));',
+    '    vec3 k = z;',
+    '    k.yz *= rot(1.2 + p1.w);',
+    '    d = smin(d, sdTorus(k, vec2(0.45, 0.08 + p1.z * 0.06)), 0.12);',
+    '    gTrap = min(gTrap, abs(d) + length(z) * 0.2);',
+    '  } else if (fam < 8.5) {',
+    '    vec3 z = p * (1.4 + p1.z);',
+    '    float cell = 1.4 + p2.x;',
+    '    vec3 id = floor(z / cell);',
+    '    vec3 f = fract(z / cell) - 0.5;',
+    '    float m = 10.0;',
+    '    for (int i = 0; i < 8; i++) {',
+    '      vec3 o = vec3(hash11(id.x + float(i) + 0.3), hash11(id.y + float(i) + 1.7), hash11(id.z + float(i) + 4.1)) - 0.5;',
+    '      m = min(m, length(f - o * 0.5));',
+    '    }',
+    '    gTrap = min(gTrap, m);',
+    '    d = m - 0.12 - p1.y * 0.06;',
+    '  } else if (fam < 9.5) {',
+    '    float ang = atan(p.y, p.x);',
+    '    float r = length(p.xy);',
+    '    float slice = TAU / sym;',
+    '    ang = mod(ang, slice) - 0.5 * slice;',
+    '    ang = abs(ang);',
+    '    vec3 z = vec3(cos(ang) * r, sin(ang) * r, p.z);',
+    '    z.xy *= rot(fold);',
+    '    float tun = (0.85 + 0.2 * p2.x + 0.15 * uBass * uReact) - length(z.xy);',
+    '    float rib = abs(fract(z.z * 0.35 + uTime * 0.04) - 0.5) - 0.04;',
+    '    d = smin(abs(tun) - 0.02, max(length(z.xy) - 0.95, rib), 0.08);',
+    '    gTrap = min(gTrap, abs(tun));',
+    '  } else {',
+    '    vec3 z = p;',
+    '    z.xy += (vec2(fbm(z.xz * (1.0 + uWarp) + uTime * 0.1), fbm(z.yz * (1.0 + uWarp) - uTime * 0.08)) - 0.5) * (0.5 + p2.w);',
+    '    float gy = abs(dot(sin(z * (2.0 + p1.z * 2.0)), cos(z.zxy * (2.0 + p1.w * 2.0)))) - 0.2;',
+    '    float sph = length(z) - (0.55 + 0.2 * p2.x);',
+    '    d = smin(gy, sph, 0.2);',
+    '    gTrap = min(gTrap, abs(gy));',
+    '  }',
+    '  return d;',
+    '}',
+    '',
+    'float mapGene(vec3 p, float idx) {',
+    '  vec4 p0, p1, p2, p3;',
+    '  gene(idx, p0, p1, p2, p3);',
+    '  float famA = floor(p0.x * 11.0);',
+    '  float famB = floor(p0.y * 11.0);',
+    '  float dA = mapFam(p, famA, p1, p2);',
+    '  float dB = mapFam(p, famB, p1, p2);',
+    '  return mix(dA, dB, smoothstep(0.15, 0.85, p0.z));',
+    '}',
+    '',
+    'float map(vec3 p) {',
+    '  gTrap = 1e5;',
+    '  p.xy += uMouse * 0.22;',
+    '  p.xy *= rot(uTime * uSpeed * 0.05);',
+    '  float w = uWarp * 0.25;',
+    '  p.xy += (vec2(fbm(p.xz * 0.4 + uTime * 0.07), fbm(p.yz * 0.4 - uTime * 0.05)) - 0.5) * w;',
+    '  float da = mapGene(p, uScene);',
+    '  float db = mapGene(p, uScene + 1.0);',
+    '  vec4 a0, a1, a2, a3;',
+    '  gene(uScene, a0, a1, a2, a3);',
+    '  float style = a3.w;',
+    '  float k = smoothstep(0.0, 1.0, uCross);',
+    '  float d;',
+    '  if (style < 0.33) d = mix(da, db, k);',
+    '  else if (style < 0.66) d = smin(da, db, 0.2 + 0.35 * k);',
+    '  else d = mix(da, max(da * (1.0 - k), db), k);',
+    '  return d;',
+    '}',
+    '',
+    'vec3 nrm(vec3 p) {',
+    '  float e = 0.0018;',
+    '  vec2 h = vec2(e, 0.0);',
+    '  return normalize(vec3(',
+    '    map(p + h.xyy) - map(p - h.xyy),',
+    '    map(p + h.yxy) - map(p - h.yxy),',
+    '    map(p + h.yyx) - map(p - h.yyx)',
+    '  ));',
+    '}',
+    '',
+    'vec3 camFor(float idx, float t) {',
+    '  vec4 p0, p1, p2, p3;',
+    '  gene(idx, p0, p1, p2, p3);',
+    '  float r = mix(1.35, 2.6, p3.x);',
+    '  float h = (p3.y - 0.5) * 1.4;',
+    '  float sp = mix(0.18, 0.55, p3.z) * uSpeed;',
+    '  float a = t * sp + idx * 0.7;',
+    '  return vec3(sin(a) * r, h + 0.15 * sin(a * 0.7), cos(a) * r);',
+    '}',
+    '',
+    'vec3 render(vec2 uv) {',
+    '  float t = uTime;',
+    '  vec3 ro = mix(camFor(uScene, t), camFor(uScene + 1.0, t), smoothstep(0.0, 1.0, uCross));',
+    '  vec3 ta = vec3(0.0, 0.0, 0.0);',
+    '  vec3 ww = normalize(ta - ro);',
+    '  vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));',
+    '  vec3 vv = cross(ww, uu);',
+    '  vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.25 * ww);',
+    '  rd.xy = rot(uMouse.x * 0.12) * rd.xy;',
+    '',
+    '  float trav = 0.0;',
+    '  vec3 p;',
+    '  bool hit = false;',
+    '  for (int i = 0; i < 56; i++) {',
+    '    p = ro + rd * trav;',
+    '    float d = map(p);',
+    '    if (d < 0.0012 * trav + 0.0008) { hit = true; break; }',
+    '    trav += d * 0.85;',
+    '    if (trav > 24.0) break;',
+    '  }',
+    '',
+    '  float pl = fbm(uv * 2.2 + t * 0.12);',
+    '  vec3 col = pal(pl * 0.6 + uIrid + uScene * 0.07) * 0.08;',
+    '  col += pal(pl + 0.4 + uCross) * 0.04 * (0.4 + uHigh * uReact);',
+    '',
+    '  if (hit) {',
+    '    float trap = gTrap;',
+    '    vec3 n = nrm(p);',
+    '    vec3 lgt = normalize(vec3(0.45, 0.7, -0.4));',
+    '    float diff = clamp(dot(n, lgt), 0.0, 1.0);',
+    '    float fre = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.1);',
+    '    float thick = 2.0 + uIrid * 3.6 + trap * 2.2 + uMid * uReact;',
+    '    vec3 film = pal(fre * thick + uIrid + trap * 1.4 + uScene * 0.11 + uBass * uReact * 0.2);',
+    '    vec3 base = mix(vec3(0.04, 0.05, 0.07), film, 0.9);',
+    '    base *= 0.22 + 0.9 * diff;',
+    '    base += film * fre * (0.75 + uIrid * 0.5);',
+    '    base += pal(trap * 3.0 + uTime * 0.05) * 0.15 * (0.3 + uHigh * uReact);',
+    '    float fog = 1.0 - exp(-trav * 0.09);',
+    '    col = mix(base, col, clamp(fog, 0.0, 1.0));',
+    '    col += film * 0.1 / (1.0 + trav * 0.16);',
+    '  } else {',
+    '    col += pal(uBeat + uIrid + uScene * 0.05) * 0.05 * uBass * uReact;',
+    '  }',
+    '  float glow = 0.1 / (0.16 + dot(uv, uv));',
+    '  col += pal(0.12 + uIrid + uBeat) * glow * (0.12 + 0.4 * uBass * uReact);',
+    '  return col;',
+    '}',
+    '',
+    'void main() {',
+    '  vec2 fragCoord = gl_FragCoord.xy;',
+    '  vec2 uv = (fragCoord - 0.5 * uRes) / min(uRes.y, uRes.x);',
+    '  float g = uGlitch * (0.35 + uHigh * uReact);',
+    '  float kick = exp(-fract(uBeat) * 8.0);',
+    '  float aberr = (0.003 + 0.012 * g) * (1.0 + kick);',
+    '  float slice = step(0.965, hash21(vec2(floor(uv.y * 42.0), floor(uTime * 10.0))));',
+    '  uv.x += slice * (hash21(vec2(floor(uTime * 10.0), 2.3)) - 0.5) * 0.16 * g;',
+    '  uv += vec2(aberr, 0.0) * vec2(0.4, -0.15);',
+    '  vec3 col = render(uv);',
+    '  col.r += aberr * 2.5 * col.g;',
+    '  col.b += aberr * 2.2 * (1.0 - col.r) * uv.x;',
+    '  float scan = 0.88 + 0.12 * sin(fragCoord.y * 2.15);',
+    '  col *= scan;',
+    '  vec2 q = fragCoord / uRes;',
+    '  col *= 0.32 + 0.68 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.34);',
+    '  col += (hash21(fragCoord + vec2(uTime * 0.1, uTime)) - 0.5) * 0.035;',
+    '  col = col / (1.0 + col * 0.35);',
+    '  col = pow(max(col, 0.0), vec3(0.86));',
+    '  fragColor = vec4(col, 1.0);',
+    '}'
   ].join("\n");
 
   function shaderSrc(is2, kind) {
@@ -593,7 +801,7 @@ var ArtLogic = (function () {
     }
     var head = is2
       ? "#version 300 es\nprecision highp float;\n#define SAMPLE(tex, uv) texture(tex, uv)\nout vec4 fragColor;\n"
-      : "precision highp float;\n#define SAMPLE(tex, uv) texture2D(tex, uv)\n#define fragColor gl_FragColor\n";
+      : "precision highp float;\n#define SAMPLE(tex, uv) texture2D(tex, uv)\n#define fragColor gl_FragColor;\n";
     return head + FS_SOURCE;
   }
 
@@ -645,9 +853,8 @@ var ArtLogic = (function () {
   function initGL() {
     var opts = { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" };
     gl = canvas.getContext("webgl2", opts);
-    if (gl) {
-      isWebGL2 = true;
-    } else {
+    if (gl) isWebGL2 = true;
+    else {
       gl = canvas.getContext("webgl", opts) || canvas.getContext("experimental-webgl", opts);
       isWebGL2 = false;
     }
@@ -682,32 +889,13 @@ var ArtLogic = (function () {
     }
   }
 
-  // --- audio ---
   var audio = {
-    ctx: null,
-    master: null,
-    analyser: null,
-    kickGain: null,
-    hatGain: null,
-    acidGain: null,
-    arpGain: null,
-    padGain: null,
-    acidOsc: null,
-    acidFilter1: null,
-    acidFilter2: null,
-    acidGate: null,
-    padOscA: null,
-    padOscB: null,
-    padFilter: null,
-    padLfo: null,
-    delay: null,
-    noiseBuf: null,
-    timer: null,
-    nextNote: 0,
-    step: 0,
-    pattern: null,
-    freqA: new Uint8Array(1024),
-    waveA: new Uint8Array(1024)
+    ctx: null, master: null, analyser: null,
+    kickGain: null, hatGain: null, percGain: null, bellGain: null, acidGain: null, padGain: null,
+    acidOsc: null, acidFilter1: null, acidFilter2: null, acidGate: null,
+    padOscA: null, padOscB: null, padFilter: null, delay: null, noiseBuf: null,
+    timer: null, nextNote: 0, step: 0, bellClock: 0, pattern: null,
+    freqA: new Uint8Array(1024), waveA: new Uint8Array(1024)
   };
 
   function makeNoiseBuffer(ctx) {
@@ -731,9 +919,7 @@ var ArtLogic = (function () {
 
   function slider(id) {
     var el = sliders[id];
-    var min = Number(el.min);
-    var max = Number(el.max);
-    return L.clamp(Number(el.value), min, max);
+    return L.clamp(Number(el.value), Number(el.min), Number(el.max));
   }
 
   function rebuildPattern() {
@@ -748,14 +934,14 @@ var ArtLogic = (function () {
     var master = ctx.createGain();
     master.gain.value = slider("volume");
     var comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18;
-    comp.knee.value = 18;
-    comp.ratio.value = 4;
+    comp.threshold.value = -16;
+    comp.knee.value = 16;
+    comp.ratio.value = 4.5;
     comp.attack.value = 0.003;
-    comp.release.value = 0.12;
+    comp.release.value = 0.14;
     var analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.68;
+    analyser.smoothingTimeConstant = 0.55;
     master.connect(comp);
     comp.connect(analyser);
     analyser.connect(ctx.destination);
@@ -770,11 +956,19 @@ var ArtLogic = (function () {
     audio.ctx = ctx;
     audio.master = master;
     audio.analyser = analyser;
-    audio.kickGain = bus(0.85);
-    audio.hatGain = bus(0.22);
-    audio.acidGain = bus(0.38);
-    audio.arpGain = bus(0.16);
-    audio.padGain = bus(0.07);
+    var kickSat = ctx.createWaveShaper();
+    kickSat.curve = makeDriveCurve(2.4);
+    kickSat.oversample = "2x";
+    var kickBus = ctx.createGain();
+    kickBus.gain.value = 1.15;
+    kickSat.connect(kickBus);
+    kickBus.connect(master);
+    audio.kickGain = kickSat;
+    audio.hatGain = bus(0.28);
+    audio.percGain = bus(0.2);
+    audio.bellGain = bus(0.4);
+    audio.acidGain = bus(0.28);
+    audio.padGain = bus(0.05);
     audio.noiseBuf = makeNoiseBuffer(ctx);
     audio.freqA = new Uint8Array(analyser.frequencyBinCount);
     audio.waveA = new Uint8Array(analyser.fftSize);
@@ -808,7 +1002,7 @@ var ArtLogic = (function () {
 
     var padF = ctx.createBiquadFilter();
     padF.type = "lowpass";
-    padF.frequency.value = 520;
+    padF.frequency.value = 480;
     padF.Q.value = 0.7;
     var padA = ctx.createOscillator();
     var padB = ctx.createOscillator();
@@ -842,11 +1036,11 @@ var ArtLogic = (function () {
     var delay = ctx.createDelay(1.0);
     delay.delayTime.value = 0.22;
     var fb = ctx.createGain();
-    fb.gain.value = 0.32;
+    fb.gain.value = 0.28;
     var delayHp = ctx.createBiquadFilter();
     delayHp.type = "highpass";
-    delayHp.frequency.value = 400;
-    audio.arpGain.connect(delayHp);
+    delayHp.frequency.value = 500;
+    audio.bellGain.connect(delayHp);
     delayHp.connect(delay);
     delay.connect(fb);
     fb.connect(delay);
@@ -859,61 +1053,143 @@ var ArtLogic = (function () {
 
   function scheduleKick(time) {
     var ctx = audio.ctx;
-    var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    var flt = ctx.createBiquadFilter();
-    flt.type = "lowpass";
-    flt.frequency.setValueAtTime(1800, time);
-    flt.frequency.exponentialRampToValueAtTime(200, time + 0.08);
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(150, time);
-    osc.frequency.exponentialRampToValueAtTime(36, time + 0.11);
-    gain.gain.setValueAtTime(1, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.26);
-    osc.connect(flt);
-    flt.connect(gain);
-    gain.connect(audio.kickGain);
-    osc.start(time);
-    osc.stop(time + 0.3);
+    var sub = ctx.createOscillator();
+    var subG = ctx.createGain();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(160, time);
+    sub.frequency.exponentialRampToValueAtTime(46, time + 0.06);
+    subG.gain.setValueAtTime(1, time);
+    subG.gain.exponentialRampToValueAtTime(0.001, time + 0.44);
+    sub.connect(subG);
+    subG.connect(audio.kickGain);
+    sub.start(time);
+    sub.stop(time + 0.5);
+
+    var punch = ctx.createOscillator();
+    var punchG = ctx.createGain();
+    punch.type = "sine";
+    punch.frequency.setValueAtTime(280, time);
+    punch.frequency.exponentialRampToValueAtTime(70, time + 0.04);
+    punchG.gain.setValueAtTime(0.5, time);
+    punchG.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
+    punch.connect(punchG);
+    punchG.connect(audio.kickGain);
+    punch.start(time);
+    punch.stop(time + 0.12);
+
+    var click = ctx.createOscillator();
+    var clickG = ctx.createGain();
+    var clickF = ctx.createBiquadFilter();
+    click.type = "square";
+    click.frequency.setValueAtTime(1800, time);
+    click.frequency.exponentialRampToValueAtTime(220, time + 0.011);
+    clickF.type = "highpass";
+    clickF.frequency.value = 1200;
+    clickG.gain.setValueAtTime(0.32, time);
+    clickG.gain.exponentialRampToValueAtTime(0.001, time + 0.014);
+    click.connect(clickF);
+    clickF.connect(clickG);
+    clickG.connect(audio.kickGain);
+    click.start(time);
+    click.stop(time + 0.03);
+
+    var nsrc = ctx.createBufferSource();
+    nsrc.buffer = audio.noiseBuf;
+    var nF = ctx.createBiquadFilter();
+    nF.type = "bandpass";
+    nF.frequency.value = 2500;
+    nF.Q.value = 1.2;
+    var nG = ctx.createGain();
+    nG.gain.setValueAtTime(0.22, time);
+    nG.gain.exponentialRampToValueAtTime(0.001, time + 0.01);
+    nsrc.connect(nF);
+    nF.connect(nG);
+    nG.connect(audio.kickGain);
+    nsrc.start(time);
+    nsrc.stop(time + 0.02);
   }
 
-  function scheduleHat(time, open) {
+  function scheduleHat(time, open, gain) {
     var ctx = audio.ctx;
     var src = ctx.createBufferSource();
     src.buffer = audio.noiseBuf;
     var hp = ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = open ? 6000 : 8000;
-    hp.Q.value = 0.7;
-    var gain = ctx.createGain();
-    var dur = open ? 0.18 : 0.045;
-    gain.gain.setValueAtTime(open ? 0.55 : 0.35, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    hp.frequency.value = open ? 5500 : 9000;
+    hp.Q.value = open ? 0.6 : 0.9;
+    var bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = open ? 7000 : 11000;
+    bp.Q.value = 0.8;
+    var g = ctx.createGain();
+    var dur = open ? 0.16 : 0.032;
+    var peak = (gain == null ? (open ? 0.58 : 0.32) : gain);
+    g.gain.setValueAtTime(peak, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + dur);
     src.connect(hp);
-    hp.connect(gain);
-    gain.connect(audio.hatGain);
+    hp.connect(bp);
+    bp.connect(g);
+    g.connect(audio.hatGain);
     src.start(time);
     src.stop(time + dur + 0.02);
   }
 
-  function scheduleArp(time, midi) {
+  function schedulePerc(time, accent) {
     var ctx = audio.ctx;
     var osc = ctx.createOscillator();
-    var gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(L.midiToFreq(midi + 12), time);
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(0.7, time + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
-    osc.connect(gain);
-    gain.connect(audio.arpGain);
+    var g = ctx.createGain();
+    var f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = accent ? 2100 : 3200;
+    f.Q.value = 6;
+    osc.type = "square";
+    osc.frequency.setValueAtTime(accent ? 420 : 780, time);
+    osc.frequency.exponentialRampToValueAtTime(accent ? 180 : 400, time + 0.03);
+    g.gain.setValueAtTime(accent ? 0.35 : 0.16, time);
+    g.gain.exponentialRampToValueAtTime(0.001, time + (accent ? 0.07 : 0.035));
+    osc.connect(f);
+    f.connect(g);
+    g.connect(audio.percGain);
     osc.start(time);
-    osc.stop(time + 0.14);
+    osc.stop(time + 0.08);
+  }
+
+  function scheduleBell(time, pitchIndex) {
+    var ctx = audio.ctx;
+    var freqs = [932.33, 1108.73, 1396.91];
+    var ratios = [2.01, 3.73, 5.41];
+    var car = freqs[pitchIndex % 3];
+    var ratio = ratios[pitchIndex % 3];
+    var modulator = ctx.createOscillator();
+    var modG = ctx.createGain();
+    var carrier = ctx.createOscillator();
+    var outG = ctx.createGain();
+    var hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 420;
+    modulator.type = "sine";
+    carrier.type = "sine";
+    modulator.frequency.setValueAtTime(car * ratio, time);
+    carrier.frequency.setValueAtTime(car, time);
+    modG.gain.setValueAtTime(car * 2.3, time);
+    modG.gain.exponentialRampToValueAtTime(2, time + 0.2);
+    var dur = 0.24;
+    outG.gain.setValueAtTime(0.0001, time);
+    outG.gain.exponentialRampToValueAtTime(0.58, time + 0.006);
+    outG.gain.exponentialRampToValueAtTime(0.001, time + dur);
+    modulator.connect(modG);
+    modG.connect(carrier.frequency);
+    carrier.connect(hp);
+    hp.connect(outG);
+    outG.connect(audio.bellGain);
+    modulator.start(time);
+    carrier.start(time);
+    modulator.stop(time + dur + 0.04);
+    carrier.stop(time + dur + 0.04);
   }
 
   function scheduleAcid(time, step, stepDur) {
     var st = audio.pattern.steps[step];
-    var ctx = audio.ctx;
     var cutoff = slider("cutoff");
     var reso = slider("resonance");
     var q = 4 + reso * 16;
@@ -932,11 +1208,11 @@ var ArtLogic = (function () {
     } else {
       audio.acidOsc.frequency.setValueAtTime(freq, time);
     }
-    var peak = st.accent ? 0.95 : 0.5;
+    var peak = st.accent ? 0.8 : 0.4;
     audio.acidGate.gain.cancelScheduledValues(time);
     audio.acidGate.gain.setValueAtTime(Math.max(audio.acidGate.gain.value, 0.0001), time);
     audio.acidGate.gain.exponentialRampToValueAtTime(peak, time + 0.008);
-    var hold = st.slide ? stepDur * 0.95 : (st.accent ? 0.2 : 0.11);
+    var hold = st.slide ? stepDur * 0.95 : (st.accent ? 0.18 : 0.1);
     audio.acidGate.gain.exponentialRampToValueAtTime(0.0001, time + hold);
     var base = 180 + cutoff * 5200;
     var env = (st.accent ? 2600 : 1100) * (0.45 + cutoff);
@@ -958,23 +1234,65 @@ var ArtLogic = (function () {
     if (audio.nextNote < ctx.currentTime) audio.nextNote = ctx.currentTime + 0.02;
     while (audio.nextNote < ctx.currentTime + ahead) {
       var step = audio.step;
-      scheduleAcid(audio.nextNote, step, stepDur);
-      if (step % 4 === 0) scheduleKick(audio.nextNote);
-      if (step % 2 === 1) scheduleHat(audio.nextNote, step % 8 === 7);
-      if (!audio.pattern.steps[step].rest && step % 2 === 0) {
-        scheduleArp(audio.nextNote, audio.pattern.steps[step].note);
-      }
+      var t = audio.nextNote;
+      if (step % 4 === 0) scheduleKick(t);
+      if (step % 2 === 1) scheduleHat(t, step % 16 === 15, step % 16 === 15 ? 0.55 : 0.3);
+      else if (step % 4 !== 0) scheduleHat(t, false, 0.12);
+      if (step % 2 === 0) schedulePerc(t, step % 8 === 4 || step % 16 === 10);
+      if (audio.bellClock % 3 === 0) scheduleBell(t, (audio.bellClock / 3) % 3);
+      audio.bellClock += 1;
+      scheduleAcid(t, step, stepDur);
       if (audio.padOscA) {
         var root = audio.pattern.root + 24;
-        audio.padOscA.frequency.setTargetAtTime(L.midiToFreq(root), audio.nextNote, 0.08);
-        audio.padOscB.frequency.setTargetAtTime(L.midiToFreq(root) * 1.005, audio.nextNote, 0.08);
+        audio.padOscA.frequency.setTargetAtTime(L.midiToFreq(root), t, 0.08);
+        audio.padOscB.frequency.setTargetAtTime(L.midiToFreq(root) * 1.005, t, 0.08);
       }
-      if (audio.delay) {
-        audio.delay.delayTime.setTargetAtTime((60 / bpm) * 0.75, audio.nextNote, 0.05);
-      }
+      if (audio.delay) audio.delay.delayTime.setTargetAtTime((60 / bpm) * 0.75, t, 0.05);
       audio.nextNote += stepDur;
       audio.step = (step + 1) % 16;
     }
+  }
+
+  function disarmGestureUnlock() {
+    if (!unlockBound) return;
+    window.removeEventListener("pointerdown", onGestureUnlock, true);
+    window.removeEventListener("keydown", onGestureUnlock, true);
+    unlockBound = false;
+  }
+
+  function onGestureUnlock(e) {
+    if (e && e.type === "pointerdown" && e.button && e.button !== 0) return;
+    disarmGestureUnlock();
+    if (!audioOn) startAudio();
+  }
+
+  function armGestureUnlock() {
+    if (unlockBound || audioOn) return;
+    unlockBound = true;
+    window.addEventListener("pointerdown", onGestureUnlock, true);
+    window.addEventListener("keydown", onGestureUnlock, true);
+    if (hint) {
+      hint.hidden = false;
+      hint.textContent = "click or press any key to start the synth";
+    }
+  }
+
+  function beginPlayback() {
+    if (!audio.ctx || audio.ctx.state === "suspended") {
+      armGestureUnlock();
+      syncAudioUi();
+      return;
+    }
+    if (!audioOn) {
+      audioOn = true;
+      audio.nextNote = audio.ctx.currentTime + 0.05;
+      audio.step = 0;
+      audio.bellClock = 0;
+    }
+    if (!audio.timer) audio.timer = setInterval(tickAudio, 25);
+    tickAudio();
+    disarmGestureUnlock();
+    syncAudioUi();
   }
 
   function startAudio() {
@@ -982,23 +1300,20 @@ var ArtLogic = (function () {
       setupAudio();
     } catch (err) {
       setError(String(err && err.message ? err.message : err));
+      armGestureUnlock();
       return;
     }
     rebuildPattern();
-    var p = audio.ctx.resume();
-    Promise.resolve(p).then(function () {
-      audioOn = audio.ctx.state !== "suspended";
-      if (audioOn) {
-        audio.nextNote = audio.ctx.currentTime + 0.05;
-        audio.step = 0;
-        if (!audio.timer) {
-          audio.timer = setInterval(tickAudio, 25);
-        }
-        tickAudio();
-      }
+    var p;
+    try {
+      p = audio.ctx.resume();
+    } catch (err) {
+      armGestureUnlock();
       syncAudioUi();
-    }).catch(function (err) {
-      setError(String(err && err.message ? err.message : err));
+      return;
+    }
+    Promise.resolve(p).then(beginPlayback).catch(function () {
+      armGestureUnlock();
       syncAudioUi();
     });
   }
@@ -1036,6 +1351,7 @@ var ArtLogic = (function () {
     audioToggle.setAttribute("aria-pressed", audioOn ? "true" : "false");
     audioToggle.textContent = audioOn ? "Stop Synth" : "Start Synth";
     if (audioOn) hint.hidden = true;
+    else if (unlockBound) hint.hidden = false;
   }
 
   function updateVolume() {
@@ -1044,33 +1360,91 @@ var ArtLogic = (function () {
     }
   }
 
-  // --- seed / URL ---
+  function syncHash() {
+    var next = L.seedHashString(seedState.display) + "&scene=" + String(sceneIndex + 1);
+    if (location.hash !== next) {
+      if (history.replaceState) history.replaceState(null, "", location.pathname + location.search + next);
+      else location.hash = next.slice(1);
+    }
+  }
+
   function applySeed(parsed, pushHash) {
     if (!parsed || !parsed.ok) return;
     seedState = { display: parsed.display, value: parsed.value >>> 0 };
     seedInput.value = seedState.display;
     document.body.dataset.seed = String(seedState.value);
-    if (pushHash !== false) {
-      var next = L.seedHashString(seedState.display);
-      if (location.hash !== next) {
-        if (history.replaceState) history.replaceState(null, "", location.pathname + location.search + next);
-        else location.hash = next.slice(1);
-      }
-    }
+    if (pushHash !== false) syncHash();
     rebuildPattern();
   }
 
   function randomizeSeed() {
+    sceneIndex = 0;
+    sceneStartBeat = visual.beat || 0;
+    sceneCross = 0;
     applySeed(L.randomSeed(), true);
+    syncSceneUi();
   }
 
-  function loadSeedFromUrl() {
-    var fromUrl = L.readSeedFromLocation(location);
-    if (fromUrl && fromUrl.ok) applySeed(fromUrl, true);
-    else applySeed(L.randomSeed(), true);
+  function loadFromUrl() {
+    var loc = location;
+    var hash = String(loc.hash || "").replace(/^#/, "");
+    var params = new URLSearchParams(hash);
+    if (!params.has("seed") && !params.has("scene")) {
+      params = new URLSearchParams(String(loc.search || "").replace(/^\?/, ""));
+    }
+    var fromUrl = L.readSeedFromLocation(loc);
+    if (fromUrl && fromUrl.ok) applySeed(fromUrl, false);
+    else applySeed(L.randomSeed(), false);
+    var sc = parseInt(params.get("scene") || "1", 10);
+    if (Number.isFinite(sc) && sc >= 1) sceneIndex = sc - 1;
+    else sceneIndex = 0;
+    sceneStartBeat = 0;
+    sceneCross = 0;
+    syncHash();
+    syncSceneUi();
   }
 
-  // --- hud ---
+  function syncSceneUi() {
+    var label = "#" + String(sceneIndex + 1);
+    sceneNum.textContent = label;
+    sceneChip.textContent = label;
+    sceneAutoEl.checked = sceneAuto;
+    document.body.dataset.scene = String(sceneIndex);
+    document.body.dataset.sceneAuto = sceneAuto ? "1" : "0";
+  }
+
+  function goScene(next, resetClock) {
+    sceneIndex = Math.max(0, next | 0);
+    if (resetClock !== false) {
+      sceneStartBeat = visual.beat || 0;
+      sceneCross = 0;
+    }
+    syncHash();
+    syncSceneUi();
+  }
+
+  function updateScene(beat) {
+    if (!sceneAuto) {
+      sceneCross = 0;
+      return;
+    }
+    var hold = sceneHoldBars * 4;
+    var fade = sceneFadeBars * 4;
+    var t = beat - sceneStartBeat;
+    if (t < 0) {
+      sceneStartBeat = beat;
+      t = 0;
+    }
+    if (t >= hold) {
+      var jumped = Math.floor(t / hold);
+      sceneIndex += jumped;
+      sceneStartBeat += jumped * hold;
+      t = beat - sceneStartBeat;
+    }
+    sceneCross = t >= hold - fade ? L.clamp((t - (hold - fade)) / fade, 0, 1) : 0;
+    syncSceneUi();
+  }
+
   function setHud(open) {
     hudOpen = !!open;
     hud.classList.toggle("collapsed", !hudOpen);
@@ -1134,6 +1508,12 @@ var ArtLogic = (function () {
     } else if (k === "f" || k === "F") {
       e.preventDefault();
       toggleFullscreen();
+    } else if (k === "[" || k === "{") {
+      e.preventDefault();
+      goScene(sceneIndex - 1, true);
+    } else if (k === "]" || k === "}") {
+      e.preventDefault();
+      goScene(sceneIndex + 1, true);
     } else if (k === "Escape" && isTypingTarget(e.target)) {
       e.target.blur();
     }
@@ -1166,20 +1546,14 @@ var ArtLogic = (function () {
       audio.analyser.getByteTimeDomainData(audio.waveA);
       nyquist = (audio.ctx && audio.ctx.sampleRate) ? audio.ctx.sampleRate * 0.5 : 22050;
       binHz = nyquist / audio.freqA.length;
-      ab = bandEnergy(audio.freqA, 1, Math.max(2, Math.floor(180 / binHz)));
-      am = bandEnergy(audio.freqA, Math.floor(180 / binHz), Math.floor(1800 / binHz));
-      ah = bandEnergy(audio.freqA, Math.floor(1800 / binHz), Math.floor(8000 / binHz));
-      ab = Math.pow(ab, 0.7);
-      am = Math.pow(am, 0.75);
-      ah = Math.pow(ah, 0.8);
+      ab = Math.pow(bandEnergy(audio.freqA, 1, Math.max(2, Math.floor(180 / binHz))), 0.65);
+      am = Math.pow(bandEnergy(audio.freqA, Math.floor(180 / binHz), Math.floor(1800 / binHz)), 0.7);
+      ah = Math.pow(bandEnergy(audio.freqA, Math.floor(1800 / binHz), Math.floor(8000 / binHz)), 0.75);
     }
-    var targetB = Math.max(ib * 0.65, ab);
-    var targetM = Math.max(im * 0.45, am);
-    var targetH = Math.max(ih * 0.4, ah);
     var k = 1 - Math.exp(-dt * 10);
-    visual.bass += (targetB - visual.bass) * k;
-    visual.mid += (targetM - visual.mid) * k;
-    visual.high += (targetH - visual.high) * k;
+    visual.bass += (Math.max(ib * 0.65, ab) - visual.bass) * k;
+    visual.mid += (Math.max(im * 0.45, am) - visual.mid) * k;
+    visual.high += (Math.max(ih * 0.4, ah) - visual.high) * k;
     visual.beat = beat;
     for (i = 0; i < 256; i++) {
       if (audioOn && audio.freqA.length) {
@@ -1230,6 +1604,7 @@ var ArtLogic = (function () {
     var beat = (time * bpm) / 60;
     mouse[0] += (mouseT[0] - mouse[0]) * (1 - Math.exp(-dt * 6));
     mouse[1] += (mouseT[1] - mouse[1]) * (1 - Math.exp(-dt * 6));
+    updateScene(beat);
     updateAnalysis(dt, time, beat);
     if (gl && prog) {
       gl.activeTexture(gl.TEXTURE0);
@@ -1248,6 +1623,8 @@ var ArtLogic = (function () {
       gl.uniform1f(loc("uIrid"), slider("irid"));
       gl.uniform1f(loc("uReact"), slider("react"));
       gl.uniform1f(loc("uGlitch"), slider("glitch"));
+      gl.uniform1f(loc("uScene"), sceneIndex);
+      gl.uniform1f(loc("uCross"), sceneCross);
       gl.uniform2f(loc("uMouse"), mouse[0], mouse[1]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       if (document.body.dataset.ready !== "1") document.body.dataset.ready = "1";
@@ -1257,8 +1634,8 @@ var ArtLogic = (function () {
 
   function boot() {
     bindSliders();
-    setHud(true);
-    loadSeedFromUrl();
+    setHud(false);
+    loadFromUrl();
     seedInput.addEventListener("input", function () {
       var parsed = L.parseSeed(seedInput.value);
       if (parsed.ok) applySeed(parsed, true);
@@ -1278,15 +1655,25 @@ var ArtLogic = (function () {
       e.preventDefault();
       toggleFullscreen();
     });
+    document.getElementById("scene-prev").addEventListener("click", function (e) {
+      e.preventDefault();
+      goScene(sceneIndex - 1, true);
+    });
+    document.getElementById("scene-next").addEventListener("click", function (e) {
+      e.preventDefault();
+      goScene(sceneIndex + 1, true);
+    });
+    sceneAutoEl.addEventListener("change", function () {
+      sceneAuto = !!sceneAutoEl.checked;
+      if (sceneAuto) sceneStartBeat = visual.beat || 0;
+      sceneCross = 0;
+      syncSceneUi();
+    });
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointermove", onPointer, { passive: true });
-    canvas.addEventListener("pointerdown", function (e) {
-      onPointer(e);
-      if (!audioOn && e.button === 0) startAudio();
-    });
+    canvas.addEventListener("pointerdown", function (e) { onPointer(e); });
     window.addEventListener("hashchange", function () {
-      var fromUrl = L.readSeedFromLocation(location);
-      if (fromUrl && fromUrl.ok && fromUrl.display !== seedState.display) applySeed(fromUrl, false);
+      loadFromUrl();
     });
     window.addEventListener("resize", resize);
     try {
@@ -1297,10 +1684,12 @@ var ArtLogic = (function () {
     }
     resize();
     requestAnimationFrame(frame);
+    startAudio();
   }
 
   boot();
 })();
+
   </script>
 </body>
 </html>

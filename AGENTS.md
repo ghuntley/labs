@@ -7,7 +7,8 @@ Guidance for coding agents working in this repo. See README.md for the layout.
 We use [Bombadil](https://github.com/antithesishq/bombadil) (Antithesis) for
 property-based testing, and we **always** use it. Any change to a web UI
 (`srv/`, `games/*`) ships with Bombadil properties covering it, and the specs
-must pass before committing.
+must pass before committing. Exception: `/art` pieces (`srv/art/`) do not
+need tests — no Bombadil specs, unit tests, or devenv test scripts.
 
 - Bombadil is in the devenv shell (`devenv shell`), pinned via `devenv.yaml`
   (`github:antithesishq/bombadil/v0.8.0`). `CHROME` points at the shell's
@@ -56,6 +57,11 @@ must pass before committing.
   `bombadil browser inspect <trace>` / `--reproduce <trace>`.
 - Pure logic (analysis, generators, parsers) also gets fast `node --test` unit
   tests, but those supplement Bombadil, they do not replace it.
+
+## Art pieces (`srv/art/`)
+
+No tests are needed for `/art` pieces. Do not add Bombadil specs, unit tests,
+or devenv test scripts for `srv/art/`. Review those pieces live.
 
 ## Deploying
 
