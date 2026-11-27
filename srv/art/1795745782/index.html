@@ -992,10 +992,10 @@ var ArtLogic = (function () {
 
   var audio = {
     ctx: null, master: null, analyser: null,
-    kickGain: null, hatGain: null, percGain: null, bellGain: null, acidGain: null, padGain: null,
+    kickGain: null, hatGain: null, percGain: null, acidGain: null, padGain: null,
     acidOsc: null, acidFilter1: null, acidFilter2: null, acidGate: null,
-    padOscA: null, padOscB: null, padFilter: null, delay: null, noiseBuf: null,
-    timer: null, nextNote: 0, step: 0, bellClock: 0, pattern: null,
+    padOscA: null, padOscB: null, padFilter: null, noiseBuf: null,
+    timer: null, nextNote: 0, step: 0, pattern: null,
     freqA: new Uint8Array(1024), waveA: new Uint8Array(1024)
   };
 
@@ -1067,7 +1067,6 @@ var ArtLogic = (function () {
     audio.kickGain = kickSat;
     audio.hatGain = bus(0.28);
     audio.percGain = bus(0.2);
-    audio.bellGain = bus(0.4);
     audio.acidGain = bus(0.28);
     audio.padGain = bus(0.05);
     audio.noiseBuf = makeNoiseBuffer(ctx);
@@ -1133,20 +1132,6 @@ var ArtLogic = (function () {
     audio.padOscA = padA;
     audio.padOscB = padB;
     audio.padFilter = padF;
-
-    var delay = ctx.createDelay(1.0);
-    delay.delayTime.value = 0.22;
-    var fb = ctx.createGain();
-    fb.gain.value = 0.28;
-    var delayHp = ctx.createBiquadFilter();
-    delayHp.type = "highpass";
-    delayHp.frequency.value = 500;
-    audio.bellGain.connect(delayHp);
-    delayHp.connect(delay);
-    delay.connect(fb);
-    fb.connect(delay);
-    delay.connect(master);
-    audio.delay = delay;
 
     rebuildPattern();
     return ctx;
@@ -1255,39 +1240,6 @@ var ArtLogic = (function () {
     osc.stop(time + 0.08);
   }
 
-  function scheduleBell(time, pitchIndex) {
-    var ctx = audio.ctx;
-    var freqs = [932.33, 1108.73, 1396.91];
-    var ratios = [2.01, 3.73, 5.41];
-    var car = freqs[pitchIndex % 3];
-    var ratio = ratios[pitchIndex % 3];
-    var modulator = ctx.createOscillator();
-    var modG = ctx.createGain();
-    var carrier = ctx.createOscillator();
-    var outG = ctx.createGain();
-    var hp = ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 420;
-    modulator.type = "sine";
-    carrier.type = "sine";
-    modulator.frequency.setValueAtTime(car * ratio, time);
-    carrier.frequency.setValueAtTime(car, time);
-    modG.gain.setValueAtTime(car * 2.3, time);
-    modG.gain.exponentialRampToValueAtTime(2, time + 0.2);
-    var dur = 0.24;
-    outG.gain.setValueAtTime(0.0001, time);
-    outG.gain.exponentialRampToValueAtTime(0.58, time + 0.006);
-    outG.gain.exponentialRampToValueAtTime(0.001, time + dur);
-    modulator.connect(modG);
-    modG.connect(carrier.frequency);
-    carrier.connect(hp);
-    hp.connect(outG);
-    outG.connect(audio.bellGain);
-    modulator.start(time);
-    carrier.start(time);
-    modulator.stop(time + dur + 0.04);
-    carrier.stop(time + dur + 0.04);
-  }
 
   function scheduleAcid(time, step, stepDur) {
     var st = audio.pattern.steps[step];
@@ -1340,15 +1292,12 @@ var ArtLogic = (function () {
       if (step % 2 === 1) scheduleHat(t, step % 16 === 15, step % 16 === 15 ? 0.55 : 0.3);
       else if (step % 4 !== 0) scheduleHat(t, false, 0.12);
       if (step % 2 === 0) schedulePerc(t, step % 8 === 4 || step % 16 === 10);
-      if (audio.bellClock % 3 === 0) scheduleBell(t, (audio.bellClock / 3) % 3);
-      audio.bellClock += 1;
       scheduleAcid(t, step, stepDur);
       if (audio.padOscA) {
         var root = audio.pattern.root + 24;
         audio.padOscA.frequency.setTargetAtTime(L.midiToFreq(root), t, 0.08);
         audio.padOscB.frequency.setTargetAtTime(L.midiToFreq(root) * 1.005, t, 0.08);
       }
-      if (audio.delay) audio.delay.delayTime.setTargetAtTime((60 / bpm) * 0.75, t, 0.05);
       audio.nextNote += stepDur;
       audio.step = (step + 1) % 16;
     }
@@ -1431,7 +1380,6 @@ var ArtLogic = (function () {
       audioOn = true;
       audio.nextNote = now + 0.02;
       audio.step = 0;
-      audio.bellClock = 0;
     }
     if (!audio.timer) audio.timer = setInterval(tickAudio, 25);
     tickAudio();
