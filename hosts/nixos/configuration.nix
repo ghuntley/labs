@@ -165,6 +165,8 @@
   ];
   services.nixos-autoupdate.enable = true;
   programs.mosh.enable = true; # also opens UDP 60000-61000
+  programs.tmux.enable = true;
+  services.vscode-server.enable = true; # patches VS Code Remote-SSH server binaries for NixOS
   programs.neovim = {
     enable = true;
     defaultEditor = true;
