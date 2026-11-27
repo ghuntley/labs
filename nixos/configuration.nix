@@ -13,6 +13,7 @@
     ./nix.nix
     ./packages.nix
     ./dev.nix
+    ./web.nix
     ./modules/auto-update.nix
   ];
 

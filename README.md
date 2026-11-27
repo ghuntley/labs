@@ -15,7 +15,10 @@ nixos/users.nix              users, SSH keys, sudo
 nixos/nix.nix                nix settings, allowUnfree
 nixos/packages.nix           system packages, neovim, tmux
 nixos/dev.nix                nix-ld, vscode-server
+nixos/web.nix                nginx on :80 serving the site
 nixos/modules/auto-update.nix  pull-based auto-deploy (systemd timer)
+packages/site.nix            packages srv/ as a derivation
+srv/                         static site content (index.html, ...)
 devenv.nix                   dev shell: scripts, formatter, git hooks
 ```
 
