@@ -27,6 +27,7 @@ body {
 body[data-state="menu"] #menu,
 body[data-state="loading"] #loading,
 body[data-state="paused"] #paused,
+body[data-state="share"] #share,
 body[data-state="results"] #results { display: flex; }
 body[data-state="ride"] #hud,
 body[data-state="countdown"] #hud,
@@ -173,3 +174,10 @@ body[data-state="results"] #yt, body[data-state="menu"] #yt { display: none; }
   #surge { animation: none; }
   #flash.on { animation-duration: 0.01s; }
 }
+
+/* Share step (YouTube, beat-locked) */
+#share { text-align: center; }
+#share h2 { margin: 0; }
+.share-song { margin: 0; max-width: 560px; }
+.steps { text-align: left; max-width: 460px; margin: 4px 0; padding-left: 1.4em; line-height: 1.7; }
+#share .note { max-width: 460px; }

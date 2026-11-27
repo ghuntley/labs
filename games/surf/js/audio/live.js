@@ -1,13 +1,15 @@
 // Live tab-audio capture for YouTube songs.
 //
-// The YouTube player plays inside this tab. We ask the browser to capture
-// this tab's audio. With suppressLocalAudioPlayback the browser stops playing
-// the tab's sound itself, so we can analyse the captured audio *now* and play
-// it back through a DelayNode LOOKAHEAD seconds later: the track is built
-// LOOKAHEAD seconds ahead of what you hear, so blocks land on the beat.
+// The YouTube player runs in a separate "surf · music" window (player.html).
+// We capture THAT tab's audio with suppressLocalAudioPlayback, so the browser
+// stops playing it there; we analyse the captured audio *now* and play it in
+// the game tab through a DelayNode LOOKAHEAD seconds later. The track is
+// built LOOKAHEAD seconds ahead of what you hear, so blocks land on the beat.
 //
-// Without suppression (e.g. Firefox), you hear the tab directly; items still
-// appear LOOKAHEAD seconds ahead on the track but arrive after the beat.
+// Why a separate window: suppression mutes everything the captured tab
+// plays, including Web Audio, and re-playing captured audio in the captured
+// tab would feed back into the capture. The game tab must not be captured.
+// Browsers without suppression (e.g. Firefox) use tempo mode instead.
 
 export const LOOKAHEAD = 2.5;
 
@@ -19,7 +21,9 @@ export function captureSupport() {
   return { ok: true, suppress: !!sc.suppressLocalAudioPlayback };
 }
 
-// Must be called from a user gesture. Resolves to { stream, suppressed }.
+// Must be called from a user gesture. Captures ANOTHER tab (the music
+// window); this tab is excluded from the picker. Resolves to
+// { stream, suppressed }.
 export async function captureTabAudio() {
   const stream = await navigator.mediaDevices.getDisplayMedia({
     // Chrome requires video to be requested; we drop it immediately.
@@ -30,8 +34,8 @@ export async function captureTabAudio() {
       noiseSuppression: false,
       autoGainControl: false,
     },
-    preferCurrentTab: true,
-    selfBrowserSurface: 'include',
+    preferCurrentTab: false,
+    selfBrowserSurface: 'exclude',
     surfaceSwitching: 'exclude',
     systemAudio: 'exclude',
     monitorTypeSurfaces: 'exclude',
@@ -39,7 +43,8 @@ export async function captureTabAudio() {
   for (const v of stream.getVideoTracks()) v.stop();
   const audio = stream.getAudioTracks()[0];
   if (!audio) {
-    throw new Error('No audio was shared. Pick "This tab" and keep "Share tab audio" switched on.');
+    stream.getTracks().forEach((t) => t.stop());
+    throw new Error('No audio was shared. Pick the "surf · music" tab and keep "Share tab audio" switched on.');
   }
   const settings = audio.getSettings ? audio.getSettings() : {};
   return { stream, suppressed: settings.suppressLocalAudioPlayback === true };
@@ -113,7 +118,7 @@ export class LiveAnalyser {
     }
     this.prevFlux = flux;
     // The analyser window ends "now"; the transient is on average a little earlier.
-    return { t, intensity, centroid, onset, onsetT: t - 0.025 };
+    return { t, rms, intensity, centroid, onset, onsetT: t - 0.025 };
   }
 
   setDelayEnabled(on) {

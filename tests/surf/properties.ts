@@ -3,7 +3,7 @@
 
 import { extract, always } from "@antithesishq/bombadil";
 
-const STATES = ["boot", "menu", "loading", "countdown", "ride", "paused", "results"];
+const STATES = ["boot", "menu", "loading", "share", "countdown", "ride", "paused", "results"];
 
 import { state } from "./cells.ts";
 const text = (id: string) =>
@@ -26,6 +26,7 @@ const menuShown = visible("menu");
 const hudShown = visible("hud");
 const resultsShown = visible("results");
 const pausedShown = visible("paused");
+const shareShown = visible("share");
 
 const num = (s: string) => Number(s.replace(/[^0-9.-]/g, ""));
 
@@ -38,6 +39,7 @@ export const panels_match_state = always(() => {
   if (s === "ride" || s === "countdown") return hudShown.current && !menuShown.current && !resultsShown.current;
   if (s === "paused") return pausedShown.current && hudShown.current;
   if (s === "results") return resultsShown.current && !hudShown.current;
+  if (s === "share") return shareShown.current && !hudShown.current && !menuShown.current;
   return true;
 });
 

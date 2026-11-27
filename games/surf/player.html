@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>surf · music (share this tab)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #05040c; color: #e9f4ff; font: 14px/1.4 system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    #player { flex: 1; min-height: 200px; }
+    #player iframe { width: 100%; height: 100%; border: 0; display: block; }
+    p { margin: 0; padding: 8px 12px; color: #8fa3c0; }
+    b { color: #38e8ff; }
+  </style>
+  <script type="module" src="js/player.js"></script>
+</head>
+<body>
+  <div id="player"></div>
+  <p id="msg">This window plays the music for <b>surf</b>. Keep it open. When the game asks, share <b>this tab</b> with tab audio on.</p>
+</body>
+</html>

@@ -4,6 +4,7 @@
 import { analyse, toMono, toTrackFeatures } from './audio/offline.js';
 import { parseYouTubeId, createPlayer } from './audio/youtube.js';
 import { captureSupport, captureTabAudio, LiveAnalyser, LOOKAHEAD } from './audio/live.js';
+import { openRemotePlayer } from './audio/remote.js';
 import { TrackBuilder, buildFromAnalysis, buildFromTempo, DT } from './track/generate.js';
 import { LiveFeeder } from './track/stream.js';
 import { Game, multiplier } from './game/play.js';
@@ -128,23 +129,121 @@ async function playYouTube(input) {
     return;
   }
   const ctx = getCtx();
-  setState('loading');
-
-  // Ask for tab audio first, while we still have the click's user activation.
-  let capture = null;
   const support = captureSupport();
-  if (support.ok && !$('force-tempo').checked) {
-    status('Choose "This tab" and keep "Share tab audio" on…');
-    try {
-      capture = await captureTabAudio();
-    } catch (e) {
-      console.warn(e);
-      toast(`${e.name === 'NotAllowedError' ? 'Tab audio was not shared' : e.message}. Using tempo mode instead.`, 7000);
-    }
-  } else if (!support.ok && !$('force-tempo').checked) {
-    toast(`${support.why} Using tempo mode instead.`, 7000);
+  const forced = $('force-tempo').checked;
+  if (!forced && support.ok && support.suppress) {
+    // Open the music window now, while we still have the click (popup blocker).
+    const remote = openRemotePlayer(id);
+    if (remote) return playYouTubeLive(remote, ctx, `yt:${id}`);
+    toast('The browser blocked the music window. Allow pop-ups for this site to play in sync; using tempo mode for now.', 9000);
+  } else if (!forced) {
+    toast(`${support.ok ? 'This browser cannot mute a shared tab.' : support.why} Using tempo mode.`, 7000);
+  }
+  return playYouTubeTempo(id, ctx);
+}
+
+// Beat-locked: music plays in the "surf · music" window, whose audio we
+// capture, analyse, and replay here LOOKAHEAD seconds later.
+async function playYouTubeLive(remote, ctx, songKey) {
+  setState('loading');
+  status('Opening the music window…');
+  let info;
+  try {
+    info = await remote.ready;
+  } catch (e) {
+    remote.destroy();
+    backToMenu();
+    toast(e.message || String(e), 8000);
+    return;
   }
 
+  // Sharing needs its own click (the popup used up the first one).
+  $('share-title').textContent = info.title;
+  setState('share');
+  const capture = await new Promise((resolve) => {
+    $('share-btn').onclick = async () => {
+      try {
+        resolve(await captureTabAudio());
+      } catch (e) {
+        console.warn(e);
+        toast(e.name === 'NotAllowedError' ? 'Sharing was cancelled. Try again, or go back.' : e.message, 7000);
+      }
+    };
+    $('share-cancel').onclick = () => resolve(null);
+  });
+  if (!capture) {
+    remote.destroy();
+    backToMenu();
+    return;
+  }
+  setState('loading');
+  await getView();
+
+  // If the browser did not mute the music window, don't play a second,
+  // delayed copy on top of it.
+  const delayed = capture.suppressed;
+  if (!delayed) toast('The browser kept playing the music window, so blocks arrive after the beat.', 8000);
+  const analyser = new LiveAnalyser(ctx, capture.stream, { routeToOutput: delayed });
+  const builder = new TrackBuilder(hashString(songKey));
+  let t0 = null;
+  let feeder = null;
+  let ended = false;
+  let endSongT = Infinity;
+  let heardAt = null;
+  let warnedSilent = false;
+  const songT = () => (t0 == null ? -LOOKAHEAD : ctx.currentTime - t0);
+  const stopCapture = () => capture.stream.getTracks().forEach((t) => t.stop());
+  capture.stream.getAudioTracks()[0].addEventListener('ended', () => {
+    if (session && !ended) toast('Tab audio sharing stopped.');
+    ended = true;
+    endSongT = songT();
+  });
+  ride({
+    mode: 'live',
+    badge: delayed ? 'Live · beat-locked' : 'Live',
+    title: info.title,
+    songKey,
+    builder,
+    ahead: LOOKAHEAD - 0.15,
+    duration: () => remote.duration(),
+    clock: () => songT() - LOOKAHEAD - (delayed ? outLatency(ctx) : 0),
+    start: () => {
+      remote.play();
+      waitForPlayback(remote, () => {
+        t0 = ctx.currentTime;
+        feeder = new LiveFeeder(builder, t0);
+      });
+    },
+    tick: () => {
+      const r = analyser.poll();
+      if (!feeder) return;
+      if (r.rms > 0.002) heardAt = r.t;
+      if (!warnedSilent && songT() > 6 && (heardAt == null || r.t - heardAt > 6)) {
+        warnedSilent = true;
+        toast('No sound is being captured. Did you share the "surf · music" tab with tab audio on?', 9000);
+      }
+      if (!ended && remote.isEnded()) {
+        ended = true;
+        endSongT = songT();
+      }
+      if (!ended) feeder.feed(r);
+      else feeder.finish(endSongT);
+    },
+    isOver: (t) => ended && t > endSongT + 0.5,
+    pause: () => { remote.pause(); ctx.suspend(); },
+    resume: () => { ctx.resume(); remote.play(); },
+    stop: () => {
+      analyser.stop();
+      stopCapture();
+      remote.destroy();
+    },
+  });
+}
+
+// Tempo mode: no audio access, so build from the BPM and sync to an
+// in-page player.
+async function playYouTubeTempo(id, ctx) {
+  setState('loading');
   let player;
   try {
     status('Loading the YouTube player…');
@@ -152,68 +251,12 @@ async function playYouTube(input) {
     player = await createPlayer($('yt-player'), id);
   } catch (e) {
     console.warn(e);
-    if (capture) capture.stream.getTracks().forEach((t) => t.stop());
     backToMenu();
     toast(e.message || String(e), 8000);
     return;
   }
   await getView();
   const songKey = `yt:${id}`;
-
-  if (capture) {
-    const delayed = capture.suppressed;
-    const analyser = new LiveAnalyser(ctx, capture.stream, { routeToOutput: delayed });
-    const builder = new TrackBuilder(hashString(songKey));
-    let t0 = null;
-    let feeder = null;
-    let ended = false;
-    let endSongT = Infinity;
-    const songT = () => (t0 == null ? -LOOKAHEAD : ctx.currentTime - t0);
-    if (!delayed) toast('This browser keeps playing the tab sound directly, so blocks arrive slightly after the beat.', 8000);
-    capture.stream.getAudioTracks()[0].addEventListener('ended', () => {
-      if (session && !ended) toast('Tab audio sharing stopped.');
-      ended = true;
-      endSongT = songT();
-    });
-    ride({
-      mode: 'live',
-      badge: delayed ? 'Live · beat-locked' : 'Live',
-      title: player.title(),
-      songKey,
-      builder,
-      ahead: LOOKAHEAD - 0.15,
-      duration: () => player.duration(),
-      clock: () => songT() - LOOKAHEAD - (delayed ? outLatency(ctx) : 0),
-      start: () => {
-        player.play();
-        waitForPlayback(player, () => {
-          t0 = ctx.currentTime;
-          feeder = new LiveFeeder(builder, t0);
-        });
-      },
-      tick: () => {
-        const r = analyser.poll();
-        if (!feeder) return;
-        if (!ended && player.isEnded()) {
-          ended = true;
-          endSongT = songT();
-        }
-        if (!ended) feeder.feed(r);
-        else feeder.finish(endSongT);
-      },
-      isOver: (t) => ended && t > endSongT + 0.5,
-      pause: () => { player.pause(); ctx.suspend(); },
-      resume: () => { ctx.resume(); player.play(); },
-      stop: () => {
-        analyser.stop();
-        capture.stream.getTracks().forEach((t) => t.stop());
-        player.destroy();
-      },
-    });
-    return;
-  }
-
-  // Tempo mode: no audio access, so build from the BPM and sync to the player.
   const bpm = Math.max(40, Math.min(240, Number($('bpm').value) || 120));
   const duration = player.duration() || 240;
   const builder = buildFromTempo(bpm, duration, hashString(songKey));
@@ -278,8 +321,8 @@ function ride(opts) {
   session = { ...opts, game, detach, paused: false, raf: 0 };
   $('song-title').textContent = opts.title;
   $('mode').textContent = opts.badge;
-  $('yt').classList.toggle('corner', opts.mode !== 'file');
-  $('yt').hidden = opts.mode === 'file';
+  $('yt').classList.toggle('corner', opts.mode === 'tempo');
+  $('yt').hidden = opts.mode !== 'tempo';
   setState('countdown');
   opts.start();
 
@@ -425,8 +468,8 @@ function initMenu() {
   const support = captureSupport();
   $('capture-note').textContent = support.ok
     ? support.suppress
-      ? 'You will be asked to share this tab’s audio so the track can follow the song exactly.'
-      : 'You will be asked to share this tab’s audio. In this browser blocks follow the music but arrive slightly after the beat; Chrome or Edge gives exact timing.'
+      ? 'The song plays in a small “surf · music” window. You share that window’s audio and the game plays it in sync with the track.'
+      : 'This browser cannot mute a shared tab, so YouTube songs use tempo mode (set the BPM below). Chrome or Edge play in sync with the song.'
     : `${support.why} YouTube songs will use tempo mode (set the BPM below).`;
 
   $('resume').addEventListener('click', () => togglePause(false));
