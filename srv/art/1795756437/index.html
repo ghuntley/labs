@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07081a">
+  <title>warp zone — labs.ghuntley.com</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --fg: #fff3c4;
+      --muted: #c9a36a;
+      --accent: #f8d000;
+      --accent2: #5c94fc;
+      --accent3: #e52521;
+      --luigi: #43b047;
+      --bg: rgba(8, 10, 28, 0.84);
+      --line: rgba(248, 208, 0, 0.4);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; background: #07081a; overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--fg); -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+    }
+    #c { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; overscroll-behavior: none; }
+    #cam-video, #cam-motion { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+    #cam-fab {
+      position: fixed; left: 12px; bottom: 12px; z-index: 4; appearance: none; padding: 4px 9px;
+      border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--fg);
+      font: inherit; font-size: 11px; letter-spacing: 0.06em; cursor: pointer;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    #cam-fab[aria-pressed="true"], #cam-toggle[aria-pressed="true"] {
+      border-color: var(--accent); color: var(--accent); background: rgba(248, 208, 0, 0.16);
+    }
+    #hint {
+      position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 4;
+      padding: 0.45rem 0.8rem; border: 1px solid var(--line); border-radius: 999px; background: var(--bg);
+      color: var(--fg); font-size: 11px; letter-spacing: 0.04em; pointer-events: auto; cursor: pointer;
+      white-space: nowrap; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+    #hint[hidden], #gl-error:empty { display: none; }
+    #gl-error {
+      position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 5; max-height: 40vh; overflow: auto;
+      padding: 0.7rem 0.9rem; background: rgba(40, 0, 10, 0.9); border: 1px solid var(--accent3);
+      border-radius: 8px; color: #ffd0ea; font-size: 11px; white-space: pre-wrap;
+    }
+    #hud {
+      position: fixed; top: 12px; right: 12px; z-index: 3; width: min(20.5rem, calc(100vw - 24px));
+      padding: 10px 12px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(92, 148, 252, 0.12), 0 16px 50px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-size: 11px; line-height: 1.35; user-select: none;
+    }
+    #hud.collapsed { width: auto; padding: 6px 8px; }
+    #hud.collapsed .hud-body { display: none; }
+    .hud-top { display: flex; align-items: center; gap: 0.55rem; min-height: 1.4rem; }
+    .hud-top strong { font-weight: 650; letter-spacing: 0.08em; text-transform: lowercase; color: var(--accent); }
+    .hud-top a { color: var(--accent2); text-decoration: none; border-bottom: 1px solid transparent; }
+    .hud-top a:hover { border-bottom-color: var(--accent2); }
+    #fps, #audio-state { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+    #hud.collapsed #fps { margin-left: 0.4rem; }
+    #hud-toggle {
+      appearance: none; margin-left: 0.2rem; padding: 2px 7px; border: 1px solid var(--line);
+      border-radius: 999px; background: transparent; color: var(--fg); font: inherit; letter-spacing: 0.06em; cursor: pointer;
+    }
+    #hud-toggle:hover, button:hover, #audio-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .hud-body { margin-top: 0.75rem; }
+    .row { display: flex; align-items: center; gap: 0.45rem; margin: 0.32rem 0; }
+    .row label { flex: 1; display: flex; align-items: center; gap: 0.4rem; color: var(--muted); min-width: 0; }
+    .row label > span, .lbl { flex: 0 0 7.2rem; color: var(--muted); }
+    .row input[type="range"] { flex: 1; width: 100%; min-width: 0; accent-color: var(--accent); }
+    .row input[type="text"] {
+      flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px;
+      background: rgba(0, 0, 0, 0.35); color: var(--fg); font: inherit;
+    }
+    button, #audio-toggle, #seed-random, #fullscreen {
+      appearance: none; padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px;
+      background: rgba(248, 208, 0, 0.08); color: var(--fg); font: inherit; letter-spacing: 0.04em;
+      cursor: pointer; white-space: nowrap;
+    }
+    #audio-toggle { flex: 1; background: rgba(92, 148, 252, 0.1); }
+    #audio-toggle[aria-pressed="true"] { background: rgba(67, 176, 71, 0.2); border-color: var(--luigi); color: #b6ffb0; }
+    .section { margin: 0.7rem 0 0.25rem; color: var(--accent2); letter-spacing: 0.12em; text-transform: uppercase; font-size: 9px; }
+    #spectrum { display: block; width: 100%; height: 36px; margin: 0.45rem 0 0.2rem; border-radius: 4px; background: rgba(0, 0, 0, 0.4); }
+    .keys { margin: 0.55rem 0 0; color: var(--muted); font-size: 10px; letter-spacing: 0.02em; }
+    .val { flex: 0 0 2.4rem; text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+    #scene-chip { color: var(--accent3); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+    #hud.collapsed #scene-chip { margin-left: 0; }
+    #scene-num { flex: 1; text-align: center; color: var(--accent); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+    .row.scene-row { gap: 0.35rem; }
+    .row.scene-row label { flex: 0 0 auto; color: var(--muted); gap: 0.3rem; }
+    .row.scene-row input[type="checkbox"] { accent-color: var(--accent); }
+  </style>
+</head>
+<body data-ready="0" data-renderer="" data-seed="" data-audio="off" data-hud="closed" data-fps="0" data-bass="0" data-mid="0" data-high="0" data-beat="0" data-scene="0" data-scene-auto="1" data-gl-error="">
+  <canvas id="c" tabindex="-1"></canvas>
+  <video id="cam-video" playsinline muted autoplay></video>
+  <canvas id="cam-motion" width="64" height="36"></canvas>
+  <button id="cam-fab" type="button" title="Toggle camera (C)" aria-pressed="false">cam</button>
+  <div id="hint" role="button" tabindex="0">tap or press a key to unmute</div>
+  <pre id="gl-error" hidden></pre>
+  <aside id="hud" class="collapsed" aria-label="Controls">
+    <div class="hud-top">
+      <strong>warp zone</strong>
+      <span id="scene-chip">#1</span>
+      <a id="back" href="/art/">art</a>
+      <span id="fps" aria-live="off">0 fps</span>
+      <button id="hud-toggle" type="button" title="Toggle controls (H)" aria-expanded="false" aria-controls="hud-body">H</button>
+    </div>
+    <div id="hud-body" class="hud-body">
+      <div class="section">audio</div>
+      <div class="row">
+        <button id="audio-toggle" type="button" aria-pressed="false">Start Synth</button>
+        <button id="cam-toggle" type="button" title="Toggle camera (C)" aria-pressed="false">cam</button>
+        <button id="fullscreen" type="button" title="Fullscreen (F)">full</button>
+      </div>
+      <div class="row"><label><span>Volume</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="volume-val">0.72</i></label></div>
+      <div class="row"><label><span>BPM</span><input id="bpm" type="range" min="80" max="180" step="1" value="140"><i class="val" id="bpm-val">140</i></label></div>
+      <div class="row"><label><span>303 Cutoff</span><input id="cutoff" type="range" min="0" max="1" step="0.01" value="0.38"><i class="val" id="cutoff-val">0.38</i></label></div>
+      <div class="row"><label><span>Resonance</span><input id="resonance" type="range" min="0" max="1" step="0.01" value="0.78"><i class="val" id="resonance-val">0.78</i></label></div>
+      <div class="row"><label><span>Acid Drive</span><input id="drive" type="range" min="0" max="1" step="0.01" value="0.62"><i class="val" id="drive-val">0.62</i></label></div>
+      <div class="row"><label><span>Trance Supersaw</span><input id="supersaw" type="range" min="0" max="1" step="0.01" value="0.72"><i class="val" id="supersaw-val">0.72</i></label></div>
+      <div class="section">scene</div>
+      <div class="row scene-row">
+        <button id="scene-prev" type="button" title="Previous scene ([)">prev</button>
+        <span id="scene-num">#1</span>
+        <button id="scene-next" type="button" title="Next scene (])">next</button>
+        <label><input id="scene-auto" type="checkbox" checked> Auto</label>
+      </div>
+      <div class="section">seed</div>
+      <div class="row">
+        <label><span>Seed</span><input id="seed" type="text" spellcheck="false" autocomplete="off" inputmode="text"></label>
+        <button id="seed-random" type="button" title="Randomize seed (R)">Randomize</button>
+      </div>
+      <div class="section">shader</div>
+      <div class="row"><label><span>Speed</span><input id="speed" type="range" min="0.1" max="3" step="0.01" value="1"><i class="val" id="speed-val">1.00</i></label></div>
+      <div class="row"><label><span>Camera mix</span><input id="cammix" type="range" min="0" max="1" step="0.01" value="0.45"><i class="val" id="cammix-val">0.45</i></label></div>
+      <div class="row scene-row"><label><input id="scroll-toggle" type="checkbox" checked> Scroller</label></div>
+      <canvas id="spectrum" width="320" height="36" aria-label="Audio spectrum"></canvas>
+      <p class="keys">H hud · Space audio · R seed · [ ] scene · C camera · F fullscreen</p>
+    </div>
+  </aside>
+  <script id="art-logic">
+var ArtLogic = (function () {
+  "use strict";
+  function clamp(v, a, b) {
+    v = Number(v);
+    if (Number.isNaN(v)) return a;
+    return v < a ? a : v > b ? b : v;
+  }
+  function hash32(str) {
+    var h = 2166136261;
+    str = String(str);
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function parseSeed(input) {
+    var s = String(input == null ? "" : input).trim();
+    if (!s) return { ok: false, display: "", value: 0 };
+    if (/^0x[0-9a-f]+$/i.test(s)) return { ok: true, display: s, value: parseInt(s, 16) >>> 0 };
+    if (/^\d+$/.test(s)) {
+      var v = s.length > 15 ? hash32(s) : Number(s) >>> 0;
+      return { ok: true, display: s, value: v };
+    }
+    return { ok: true, display: s, value: hash32(s) };
+  }
+  function randomSeed(rng) {
+    var v = (Math.random() * 0x100000000) >>> 0;
+    if (!rng && typeof crypto !== "undefined" && crypto.getRandomValues) {
+      var buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      v = buf[0] >>> 0;
+    } else if (typeof rng === "function") {
+      v = rng() >>> 0;
+    }
+    if (v === 0) v = 1;
+    return { ok: true, display: String(v), value: v };
+  }
+  function readSeedFromLocation(loc) {
+    loc = loc || { hash: "", search: "" };
+    var hash = String(loc.hash || "").replace(/^#/, "");
+    var params = new URLSearchParams(hash);
+    if (!params.has("seed")) params = new URLSearchParams(String(loc.search || "").replace(/^\?/, ""));
+    if (!params.has("seed")) return null;
+    return parseSeed(params.get("seed"));
+  }
+  function seedHashString(display) {
+    return "#seed=" + encodeURIComponent(String(display));
+  }
+  function mulberry32(a) {
+    a = a >>> 0;
+    return function () {
+      var t = (a += 0x6d2b79f5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function buildAcidPattern(seed) {
+    seed = seed >>> 0;
+    var rand = mulberry32(seed);
+    var root = 33 + (seed % 12);
+    var scales = [
+      [0, 0, 3, 5, 7, 7, 10, 12, 15],
+      [0, 4, 7, 11, 12, 16, 19, 24],
+      [0, 2, 4, 7, 9, 12, 14, 16],
+      [0, 3, 5, 6, 7, 10, 12, 15]
+    ];
+    var scale = scales[seed % 4];
+    var steps = [];
+    var i, r, rest, note, accent, slide;
+    for (i = 0; i < 16; i++) {
+      r = rand();
+      rest = r < 0.1;
+      note = root + scale[Math.floor(rand() * scale.length)] + (rand() < 0.22 ? 12 : 0);
+      accent = rand() < 0.32;
+      slide = !rest && rand() < 0.28;
+      steps.push({ rest: rest, note: note, accent: accent, slide: slide });
+    }
+    steps[0].rest = false;
+    steps[0].accent = true;
+    var chords = [[0, 7, 12, 16], [0, 3, 7, 10], [0, 4, 7, 11], [0, 5, 7, 12]];
+    var arp = [0, 7, 12, 16, 19, 16, 12, 7];
+    if (seed % 3 === 1) arp = [0, 4, 7, 11, 12, 11, 7, 4];
+    if (seed % 3 === 2) arp = [0, 3, 7, 10, 12, 15, 12, 7];
+    return { root: root, steps: steps, chord: chords[seed % 4], arp: arp, scale: scale };
+  }
+  function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  return {
+    clamp: clamp, hash32: hash32, parseSeed: parseSeed, randomSeed: randomSeed,
+    readSeedFromLocation: readSeedFromLocation, seedHashString: seedHashString,
+    mulberry32: mulberry32, buildAcidPattern: buildAcidPattern, midiToFreq: midiToFreq
+  };
+})();
+  </script>
+  <script id="art-main">
+(function () {
+  "use strict";
+
+  var L = ArtLogic;
+  var canvas = document.getElementById("c");
+  var hud = document.getElementById("hud");
+  var hudToggle = document.getElementById("hud-toggle");
+  var audioToggle = document.getElementById("audio-toggle");
+  var hint = document.getElementById("hint");
+  var glError = document.getElementById("gl-error");
+  var fpsEl = document.getElementById("fps");
+  var seedInput = document.getElementById("seed");
+  var sceneNum = document.getElementById("scene-num");
+  var sceneChip = document.getElementById("scene-chip");
+  var sceneAutoEl = document.getElementById("scene-auto");
+  var scrollToggle = document.getElementById("scroll-toggle");
+  var specCanvas = document.getElementById("spectrum");
+  var specCtx = specCanvas.getContext("2d");
+  var sliders = {
+    volume: document.getElementById("volume"),
+    bpm: document.getElementById("bpm"),
+    cutoff: document.getElementById("cutoff"),
+    resonance: document.getElementById("resonance"),
+    drive: document.getElementById("drive"),
+    supersaw: document.getElementById("supersaw"),
+    speed: document.getElementById("speed"),
+    cammix: document.getElementById("cammix")
+  };
+  var seedState = { display: "1", value: 1 };
+  var hudOpen = false, audioOn = false, unlockBound = false;
+  var sceneIndex = 0, sceneAuto = true, sceneStartBeat = 0, sceneHoldBars = 8, sceneFadeBars = 1, sceneCross = 0;
+  var scrollOn = true;
+  var mouse = [0, 0], mouseT = [0, 0], pointerVel = [0, 0], pointerDown = 0, pointerEnergy = 0, lastPtr = [0, 0, 0];
+  var pulseAmp = 0, pulsePos = [0, 0], zoom = 0, zoomT = 0, twist = 0, twistV = 0, interactNudge = 0;
+  var pinch = { active: false, dist: 1, angle: 0, zoom: 0, twist: 0 };
+  var cam = { on: false, starting: false, stream: null, tex: null, prev: null, motion: 0, energy: 0, cx: 0, cy: 0 };
+  var camVideo = document.getElementById("cam-video");
+  var camMotion = document.getElementById("cam-motion");
+  var camMctx = camMotion.getContext("2d", { willReadFrequently: true });
+  var camFab = document.getElementById("cam-fab");
+  var camToggle = document.getElementById("cam-toggle");
+  var startMs = performance.now(), lastMs = startMs, fpsSmoothed = 0;
+  var visual = { bass: 0, mid: 0, high: 0, beat: 0 };
+  var scrollCanvas = null, scrollTex = null;
+
+  var FS_SOURCE = [
+    'precision highp float;',
+    'uniform vec2 uRes;',
+    'uniform float uTime, uBeat, uBass, uMid, uHigh;',
+    'uniform float uSeed, uSpeed, uReact;',
+    'uniform float uScene, uCross;',
+    'uniform vec2 uMouse;',
+    'uniform vec2 uPointer;',
+    'uniform vec2 uPointerVel;',
+    'uniform float uPointerDown;',
+    'uniform float uPulse;',
+    'uniform vec2 uPulsePos;',
+    'uniform float uZoom;',
+    'uniform float uScrollTwist;',
+    'uniform sampler2D uFreq;',
+    'uniform sampler2D uCamTex;',
+    'uniform sampler2D uScrollTex;',
+    'uniform float uCamOn, uCamMotion, uCamEnergy, uCamMix, uScrollOn;',
+    'uniform vec2 uCamCenter;',
+    'const float PI = 3.14159265359;',
+    'const float TAU = 6.28318530718;',
+    'float gTrap; float gMat;',
+    'float hash11(float n) { return fract(sin(n + uSeed * 0.00013) * 43758.5453123); }',
+    'vec4 hash41(float n) {',
+    '  return fract(sin(vec4(n, n + 1.73, n + 3.11, n + 5.27) + uSeed * 0.00011) * vec4(43758.5453, 22453.643, 19642.431, 31415.926));',
+    '}',
+    'float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed * 0.00011) * 43758.5453); }',
+    'float noise(vec2 p) {',
+    '  vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+    '  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);',
+    '}',
+    'float fbm(vec2 p) { float a = 0.0; float b = 0.5; for (int i = 0; i < 4; i++) { a += b * noise(p); p = p * 2.07 + 13.17; b *= 0.5; } return a; }',
+    'mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }',
+    'float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }',
+    'float sdSphere(vec3 p, float r) { return length(p) - r; }',
+    'float sdBox(vec3 p, vec3 b) { vec3 q = abs(p) - b; return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0); }',
+    'float sdCylY(vec3 p, float r, float h) { vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, h); return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)); }',
+    'float sdEllipsoid(vec3 p, vec3 r) { float k0 = length(p / r); return k0 * (k0 - 1.0) / length(p / (r * r)); }',
+    'float sdTorus(vec3 p, vec2 t) { vec2 q = vec2(length(p.xz) - t.x, p.y); return length(q) - t.y; }',
+    'float sdStar2(vec2 p, float r, float rf) {',
+    '  vec2 k1 = vec2(0.809016994375, -0.587785252292);',
+    '  vec2 k2 = vec2(-k1.x, k1.y);',
+    '  p.x = abs(p.x);',
+    '  p -= 2.0 * max(dot(k1, p), 0.0) * k1;',
+    '  p -= 2.0 * max(dot(k2, p), 0.0) * k2;',
+    '  p.x = abs(p.x); p.y -= r;',
+    '  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);',
+    '  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);',
+    '  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);',
+    '}',
+    'float sdMenger(vec3 p, float kick) {',
+    '  float d = sdBox(p, vec3(1.0)); float s = 1.0;',
+    '  for (int i = 0; i < 3; i++) {',
+    '    vec3 a = mod(p * s, 2.0) - 1.0; s *= 3.0;',
+    '    vec3 r = abs(1.0 - 3.0 * abs(a));',
+    '    float c = (min(max(r.x, r.y), min(max(r.y, r.z), max(r.z, r.x))) - 1.0) / s;',
+    '    d = max(d, c);',
+    '  }',
+    '  return d - kick * 0.06;',
+    '}',
+    'vec3 pal(float t, vec3 a, vec3 b, vec3 c, vec3 d) { return a + b * cos(TAU * (c * t + d)); }',
+    'vec3 palAcid(float t) { return pal(t, vec3(0.55, 0.42, 0.35), vec3(0.45, 0.42, 0.40), vec3(1.0, 0.85, 0.7), vec3(0.05, 0.33, 0.67)); }',
+    'void gene(float idx, out vec4 p0, out vec4 p1, out vec4 p2, out vec4 p3) {',
+    '  float n = idx + 0.17;',
+    '  p0 = hash41(n * 3.17 + 1.11); p1 = hash41(n * 5.09 + 7.31);',
+    '  p2 = hash41(n * 8.51 + 13.93); p3 = hash41(n * 11.27 + 21.53);',
+    '}',
+
+    'float mapFam(vec3 p, float fam, vec4 p1, vec4 p2, vec4 p3) {',
+    '  float d = 1e5; gMat = 0.0; gTrap = length(p);',
+    '  float t = uTime * uSpeed;',
+    '  if (fam < 0.5) {',
+    '    vec3 q = p;',
+    '    q.xy *= rot(q.z * mix(0.08, 0.42, p1.x) + t * 0.35 + uScrollTwist * 0.2);',
+    '    float rad = mix(0.62, 1.15, p1.y) + 0.1 * sin(q.z * mix(7.0, 16.0, p1.z) + uBeat * TAU) + uBass * 0.12;',
+    '    float body = abs(length(q.xy) - rad) - mix(0.1, 0.2, p1.w);',
+    '    float ribs = length(vec2(length(q.xy) - rad - 0.07, sin(q.z * mix(8.0, 14.0, p2.x)))) - 0.05;',
+    '    d = smin(body, ribs, 0.07);',
+    '    vec3 lip = q; lip.z = mod(lip.z + 2.4, 4.8) - 2.4;',
+    '    d = smin(d, sdTorus(lip.xzy, vec2(rad + 0.02, 0.08)), 0.05);',
+    '    vec3 side = q; side.xy = abs(side.xy); side.xy -= vec2(rad + mix(0.55, 1.1, p2.y), 0.0); side.z = mod(side.z, 3.2) - 1.6;',
+    '    d = smin(d, min(sdCylY(side.xzy, 0.16, 0.45), sdTorus(side.xzy - vec3(0.0, 0.4, 0.0), vec2(0.2, 0.06))), 0.1);',
+    '    gMat = 0.0; gTrap = length(q.xy);',
+    '  } else if (fam < 1.5) {',
+    '    vec3 q = p; q.y += 0.15 * sin(t * 0.8 + p.x * 0.4);',
+    '    float cell = mix(1.9, 2.7, p1.x);',
+    '    vec3 id = floor(q / cell); vec3 l = q - (id + 0.5) * cell;',
+    '    float which = hash21(id.xz + vec2(id.y * 3.1, 0.7));',
+    '    float spin = t * (2.6 + p1.y) + id.x * 1.7;',
+    '    if (which < 0.34) { d = sdBox(l, vec3(0.42 + uBass * 0.04)); gMat = 1.0; }',
+    '    else if (which < 0.62) { d = sdBox(l, vec3(0.42)); gMat = 2.0; }',
+    '    else if (which < 0.86) { vec3 c = l; c.xy *= rot(spin); d = sdCylY(c.xzy, 0.26, 0.045); gMat = 3.0; }',
+    '    else { d = sdMenger(l * 1.15, uBass); gMat = 2.0; }',
+    '    float ground = q.y + 1.6 + 0.04 * sin(q.x * 2.0);',
+    '    if (ground < d) { d = ground; gMat = 2.0; }',
+    '    vec3 orb = q; orb.xz *= rot(t * 0.4);',
+    '    float coins = sdCylY((orb - vec3(1.4, 0.8 + 0.2 * sin(t * 3.0), 0.0)).xzy, 0.18, 0.04);',
+    '    if (coins < d) { d = coins; gMat = 3.0; }',
+    '    gTrap = length(l);',
+    '  } else if (fam < 2.5) {',
+    '    vec3 q = p;',
+    '    q.yz *= rot(t * 0.31 + uScrollTwist * 0.1); q.xz *= rot(t * 0.22);',
+    '    float folds = 5.0 + floor(p1.x * 4.0);',
+    '    float ang = atan(q.x, q.z); float seg = TAU / folds; float ia = floor(ang / seg);',
+    '    ang = mod(ang, seg) - seg * 0.5; float rl = length(q.xz);',
+    '    q.xz = vec2(cos(ang), sin(ang)) * rl; q.xy *= rot(0.2 * sin(t + ia));',
+    '    float st = sdStar2(q.xy, mix(0.55, 0.95, p1.y) + uBass * 0.2, mix(0.35, 0.55, p1.z));',
+    '    d = max(st, abs(q.z) - mix(0.12, 0.35, p1.w));',
+    '    vec3 q2 = p; q2.xy *= rot(t * 0.7);',
+    '    float burst = abs(length(q2) - (0.2 + fract(uBeat * 0.25 + hash11(ia)) * 2.4)) - 0.03;',
+    '    d = smin(d, burst, 0.08);',
+    '    d = smin(d, sdSphere(p, 0.28 + uBass * 0.15), 0.1);',
+    '    gMat = 4.0; gTrap = rl;',
+    '  } else if (fam < 3.5) {',
+    '    vec3 q = p;',
+    '    float lava = q.y + 1.15 + 0.28 * fbm(q.xz * 1.8 + vec2(t * 0.35, t * 0.2)) * (1.0 + uBass * 0.8);',
+    '    d = lava; gMat = 5.0;',
+    '    float spacing = mix(2.2, 3.2, p1.x);',
+    '    vec2 pid = floor(q.xz / spacing); vec2 pl = q.xz - (pid + 0.5) * spacing;',
+    '    float ph = mix(0.8, 1.8, hash21(pid));',
+    '    float pillar = sdCylY(vec3(pl.x, q.y + 0.2, pl.y), mix(0.22, 0.42, hash21(pid + 2.2)), ph);',
+    '    pillar += 0.04 * sin(q.y * 9.0 + t * 2.0);',
+    '    if (pillar < d) { d = pillar; gMat = 9.0; }',
+    '    float fang = t * mix(1.4, 2.6, p1.y) + uBeat * 0.4;',
+    '    vec3 fb = q; fb.xy *= rot(fang);',
+    '    float arm = 1e5;',
+    '    for (int i = 0; i < 5; i++) {',
+    '      float fi = float(i);',
+    '      arm = min(arm, sdSphere(fb - vec3(0.28 + fi * 0.28, 0.0, 0.0), 0.09 + 0.02 * sin(t * 10.0 + fi)));',
+    '    }',
+    '    arm = min(arm, sdCylY(fb.xzy - vec3(0.7, 0.0, 0.0), 0.025, 0.75));',
+    '    if (arm < d) { d = arm; gMat = 8.0; }',
+    '    gTrap = q.y + 1.2;',
+    '  } else {',
+    '    vec3 z = p; z.xz *= rot(t * 0.15);',
+    '    float amp = 1.0; float sc = mix(1.35, 1.85, p1.x);',
+    '    vec3 off = vec3(p2.x, p2.y, p2.z) * 1.15 + 0.25;',
+    '    for (int i = 0; i < 6; i++) {',
+    '      z = abs(z);',
+    '      if (z.x < z.y) z.xy = z.yx;',
+    '      if (z.x < z.z) z.xz = z.zx;',
+    '      z.xy *= rot(p1.y * TAU + uMid * 0.4);',
+    '      z = z * sc - off * (sc - 1.0); amp *= sc; gTrap = min(gTrap, length(z));',
+    '    }',
+    '    vec3 q = z / amp;',
+    '    q += 0.12 * vec3(fbm(q.yz * 3.0 + t), fbm(q.zx * 3.0 - t * 0.7), fbm(q.xy * 3.0 + t * 0.4)) * (0.5 + uMid);',
+    '    float cap = sdEllipsoid(q - vec3(0.0, 0.42, 0.0), vec3(0.72, 0.34, 0.72));',
+    '    float stem = sdCylY(q - vec3(0.0, -0.15, 0.0), 0.16, 0.48);',
+    '    float base = sdEllipsoid(q - vec3(0.0, -0.58, 0.0), vec3(0.28, 0.1, 0.28));',
+    '    d = smin(smin(cap, stem, 0.08), base, 0.06);',
+    '    gMat = p1.z > 0.55 ? 7.0 : 6.0;',
+    '  }',
+    '  return d;',
+    '}',
+    'float mapIdx(vec3 p, float idx) {',
+    '  vec4 p0, p1, p2, p3; gene(idx, p0, p1, p2, p3);',
+    '  float fam = floor(mod(p0.x * 5.0, 5.0));',
+    '  p.xy *= rot(uPointer.x * 0.35 + uPointerVel.x * 0.02);',
+    '  p.xz *= rot(uPointer.y * 0.3);',
+    '  p += vec3(uCamCenter * uCamEnergy * 0.35, 0.0);',
+    '  p.x += 0.08 * uMid * sin(p.y * 4.0 + uTime + idx);',
+    '  return mapFam(p, fam, p1, p2, p3);',
+    '}',
+    'float mapWorld(vec3 p) {',
+    '  float d1 = mapIdx(p, uScene); float m1 = gMat; float t1 = gTrap;',
+    '  if (uCross < 0.001) { gMat = m1; gTrap = t1; return d1; }',
+    '  vec3 q = p; q.xy *= rot(uCross * 5.0); q.z -= uCross * 1.6;',
+    '  float d2 = mapIdx(q, uScene + 1.0); float m2 = gMat; float t2 = gTrap;',
+    '  float pipe = abs(length(p.xy) - mix(2.4, 0.35, uCross)) - 0.16;',
+    '  float d = mix(d1, d2, smoothstep(0.0, 1.0, uCross));',
+    '  d = smin(d, pipe, 0.2);',
+    '  gMat = mix(m1, m2, step(0.45, uCross));',
+    '  if (pipe < d1 * 0.6 && uCross > 0.2) gMat = 0.0;',
+    '  gTrap = mix(t1, t2, uCross);',
+    '  return d;',
+    '}',
+    'vec3 calcNormal(vec3 p) {',
+    '  vec2 h = vec2(0.0025, 0.0);',
+    '  return normalize(vec3(mapWorld(p + h.xyy) - mapWorld(p - h.xyy), mapWorld(p + h.yxy) - mapWorld(p - h.yxy), mapWorld(p + h.yyx) - mapWorld(p - h.yyx)));',
+    '}',
+    'vec3 albedoOf(float mat, vec3 p, float trap) {',
+    '  if (mat < 0.5) {',
+    '    float rib = 0.5 + 0.5 * sin(trap * 10.0 + p.z * 8.0);',
+    '    vec3 copper = palAcid(p.z * 0.15 + uTime * 0.2 + uMid);',
+    '    return mix(vec3(0.12, 0.85, 0.22), vec3(0.05, 0.45, 0.1), rib) + copper * 0.25 * uMid;',
+    '  } else if (mat < 1.5) {',
+    '    vec2 face = p.xy;',
+    '    float qmark = smoothstep(0.08, 0.04, abs(length(face - vec2(0.0, 0.08)) - 0.12));',
+    '    qmark = max(qmark, smoothstep(0.07, 0.03, length(face - vec2(0.0, -0.16))));',
+    '    return mix(vec3(0.98, 0.78, 0.12), vec3(0.35, 0.18, 0.02), qmark);',
+    '  } else if (mat < 2.5) {',
+    '    vec2 g = abs(fract(p.xy * 3.2) - 0.5);',
+    '    float mortar = smoothstep(0.42, 0.48, max(g.x, g.y));',
+    '    return mix(vec3(0.72, 0.32, 0.12), vec3(0.35, 0.18, 0.1), mortar);',
+    '  } else if (mat < 3.5) {',
+    '    float ring = smoothstep(0.04, 0.0, abs(length(p.xy) - 0.14));',
+    '    return mix(vec3(1.0, 0.82, 0.15), vec3(1.0, 0.95, 0.55), ring) * (1.2 + uBass * 0.5);',
+    '  } else if (mat < 4.5) {',
+    '    return palAcid(uBeat * 0.25 + trap * 0.3 + uTime * 0.8) * (1.3 + uHigh);',
+    '  } else if (mat < 5.5) {',
+    '    vec3 lava = mix(vec3(0.15, 0.02, 0.0), vec3(1.0, 0.35, 0.02), 0.4 + 0.6 * fbm(p.xz * 3.0 + uTime));',
+    '    return mix(lava, vec3(1.0, 0.9, 0.2), pow(uBass, 1.4));',
+    '  } else if (mat < 6.5) {',
+    '    float spots = smoothstep(0.35, 0.36, noise(p.xz * 6.0 + p.y));',
+    '    return mix(vec3(0.9, 0.12, 0.1), vec3(1.0, 0.95, 0.92), spots);',
+    '  } else if (mat < 7.5) {',
+    '    float spots = smoothstep(0.35, 0.36, noise(p.xz * 6.0 + p.y));',
+    '    return mix(vec3(0.1, 0.75, 0.22), vec3(0.85, 1.0, 0.85), spots);',
+    '  } else if (mat < 8.5) {',
+    '    return vec3(1.0, 0.45 + 0.4 * sin(uTime * 12.0), 0.08) * (1.4 + uBass);',
+    '  }',
+    '  return mix(vec3(0.08, 0.07, 0.08), vec3(0.7, 0.25, 0.05), 0.3 + 0.7 * fbm(p.xy * 4.0));',
+    '}',
+    'vec3 skyOf(float fam, vec3 rd) {',
+    '  if (fam < 0.5) return mix(vec3(0.01, 0.02, 0.04), palAcid(rd.z * 0.4 + uTime * 0.1), 0.35 + 0.4 * uMid);',
+    '  if (fam < 1.5) {',
+    '    vec3 sky = mix(vec3(0.36, 0.58, 0.99), vec3(0.7, 0.85, 1.0), rd.y * 0.5 + 0.5);',
+    '    float hills = smoothstep(0.02, 0.0, rd.y + 0.18 + 0.08 * sin(rd.x * 8.0));',
+    '    return mix(sky, vec3(0.15, 0.7, 0.22), hills);',
+    '  }',
+    '  if (fam < 2.5) return palAcid(atan(rd.y, rd.x) / TAU + uBeat * 0.1) * (0.35 + uHigh);',
+    '  if (fam < 3.5) return mix(vec3(0.12, 0.02, 0.0), vec3(0.7, 0.12, 0.02), 0.4 + 0.4 * rd.y + uBass * 0.3);',
+    '  return mix(vec3(0.05, 0.02, 0.08), vec3(0.6, 0.15, 0.45), 0.4 + 0.3 * rd.y);',
+    '}',
+
+    'void main() {',
+    '  vec2 fragCoord = gl_FragCoord.xy',
+    '  vec2 uv = (fragCoord - 0.5 * uRes) / min(uRes.y, uRes.x);',
+    '  vec2 uvn = fragCoord / uRes;',
+    '  float kick = uBass * uReact;',
+    '  uv *= 1.0 - uZoom * 0.35;',
+    '  uv -= uPointer * 0.04 * uPointerDown;',
+    '  uv += uCamCenter * uCamEnergy * 0.08;',
+    '  if (uCross > 0.0) {',
+    '    uv += uCross * 0.08 * vec2(sin(uv.y * 70.0 + uTime * 18.0), sin(uv.x * 40.0));',
+    '    uv *= rot(uCross * 0.8);',
+    '    uv *= 1.0 + uCross * 0.35 * sin(uTime * 20.0);',
+    '  }',
+    '  uv += uPulse * 0.05 * sin(20.0 * length(uv - uPulsePos) - uTime * 16.0) * (uv - uPulsePos);',
+    '  vec4 gp, p1, p2, p3; gene(uScene, gp, p1, p2, p3);',
+    '  float fam = floor(mod(gp.x * 5.0, 5.0));',
+    '  vec3 ro = vec3(0.0, 0.1, -3.15 + uZoom * 0.9);',
+    '  if (fam > 3.5) ro.z = -2.4 + uZoom * 0.7;',
+    '  if (fam > 0.5 && fam < 1.5) ro = vec3(0.0, 0.35, -4.0 + uZoom);',
+    '  vec3 ta = vec3(uPointer.x * 0.4, uPointer.y * 0.3, 0.0);',
+    '  vec3 ww = normalize(ta - ro);',
+    '  vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));',
+    '  vec3 vv = cross(ww, uu);',
+    '  vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.35 * ww);',
+    '  rd.xy *= rot(uScrollTwist * 0.12);',
+    '  float t = 0.0; float hit = 0.0; vec3 pos;',
+    '  for (int i = 0; i < 56; i++) {',
+    '    pos = ro + rd * t;',
+    '    float d = mapWorld(pos);',
+    '    if (d < 0.0015) { hit = 1.0; break; }',
+    '    if (t > 18.0) break;',
+    '    t += d * 0.9;',
+    '  }',
+    '  float mat = gMat; float trap = gTrap;',
+    '  vec3 sky = skyOf(fam, rd); vec3 col = sky;',
+    '  if (hit > 0.5) {',
+    '    vec3 n = calcNormal(pos);',
+    '    vec3 lite = normalize(vec3(0.45, 0.82, 0.35));',
+    '    float diff = clamp(dot(n, lite), 0.0, 1.0);',
+    '    float rim = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);',
+    '    float spec = pow(clamp(dot(reflect(-lite, n), -rd), 0.0, 1.0), 32.0);',
+    '    vec3 alb = albedoOf(mat, pos, trap);',
+    '    float emit = 0.0;',
+    '    if (mat > 2.5 && mat < 5.5) emit = 0.45 + uBass * 0.4;',
+    '    if (mat > 7.5 && mat < 8.5) emit = 0.8;',
+    '    if (mat > 4.5 && mat < 5.5) emit = 0.7 + kick;',
+    '    col = alb * (0.14 + 0.86 * diff) + rim * alb * 0.45 + spec * vec3(1.0, 0.9, 0.6) * 0.5 + alb * emit;',
+    '    col = mix(col, sky, 1.0 - exp(-t * 0.08));',
+    '  }',
+    '  vec2 sp = uv * vec2(14.0, 9.0); vec2 si = floor(sp); vec2 sf = fract(sp) - 0.5;',
+    '  float sh = hash21(si + 19.0);',
+    '  float star = smoothstep(0.975, 0.998, sh) * smoothstep(0.055, 0.0, length(sf));',
+    '  star *= 0.5 + 0.5 * sin(uTime * 7.0 + sh * 40.0);',
+    '  col += vec3(1.0, 0.95, 0.7) * star * (0.45 + uHigh);',
+    '  float copperY = uvn.y * 18.0 + uTime * 0.8 + uMid * 3.0;',
+    '  vec3 copper = palAcid(copperY * 0.15 + fam * 0.2);',
+    '  float bar = smoothstep(0.65, 1.0, 0.5 + 0.5 * sin(copperY * TAU));',
+    '  col = mix(col, copper, bar * 0.12 * (0.4 + uMid));',
+    '  float wave = abs(length(uv - uPulsePos) - (1.15 - uPulse) * 1.4);',
+    '  col += vec3(1.0, 0.85, 0.2) * exp(-wave * 22.0) * uPulse * 1.2;',
+    '  col += vec3(1.0, 0.4, 0.9) * uPulse * 0.12;',
+    '  if (uCamOn > 0.5) {',
+    '    vec2 cuv = vec2(1.0 - uvn.x, 1.0 - uvn.y);',
+    '    cuv += 0.04 * uCamMotion * vec2(sin(uvn.y * 30.0), cos(uvn.x * 24.0));',
+    '    vec3 cc = SAMPLE(uCamTex, clamp(cuv, 0.0, 1.0)).rgb;',
+    '    float lum = dot(cc, vec3(0.299, 0.587, 0.114));',
+    '    vec3 psy = palAcid(lum * 2.0 + uTime * 0.3 + uBeat) * (0.4 + lum);',
+    '    col = mix(col, mix(cc, psy, 0.65), uCamMix * (0.35 + uCamEnergy * 0.5));',
+    '  }',
+    '  if (uScrollOn > 0.5) {',
+    '    float sy = uvn.y + 0.04 * sin(uvn.x * 28.0 + uTime * 5.5);',
+    '    float band = smoothstep(0.065, 0.05, abs(sy - 0.09));',
+    '    if (band > 0.0) {',
+    '      float sx = fract(uvn.x * 0.42 + uTime * 0.07);',
+    '      float ty = clamp((sy - 0.045) / 0.09, 0.0, 1.0);',
+    '      vec4 sc = SAMPLE(uScrollTex, vec2(sx, ty));',
+    '      col = mix(col, mix(col * 0.35, sc.rgb, sc.a), band * sc.a);',
+    '      col += copper * band * 0.2;',
+    '    }',
+    '  }',
+    '  float ca = 0.004 + 0.01 * uHigh + 0.02 * uCross + 0.015 * uPulse;',
+    '  if (fam > 1.5 && fam < 2.5) ca += 0.012;',
+    '  col.r += ca * 8.0 * kick * palAcid(uTime).r;',
+    '  col.b += ca * 6.0 * uHigh;',
+    '  col *= 0.88 + 0.12 * sin(fragCoord.y * 1.7 + uTime * 8.0);',
+    '  col *= smoothstep(1.5, 0.35, length((uvn - 0.5) * vec2(1.2, 1.0)));',
+    '  col += 0.04 * kick * vec3(1.0, 0.85, 0.4);',
+    '  col = pow(max(col, 0.0), vec3(0.86));',
+    '  fragColor = vec4(col, 1.0);',
+    '}',
+  ].join("\n");
+
+  function shaderSrc(is2, kind) {
+    if (kind === "vs") {
+      return is2
+        ? "#version 300 es\nin vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }"
+        : "attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }";
+    }
+    var head = is2
+      ? "#version 300 es\nprecision highp float;\n#define SAMPLE(tex, uv) texture(tex, uv)\nout vec4 fragColor;\n"
+      : "precision highp float;\n#define SAMPLE(tex, uv) texture2D(tex, uv)\n#define fragColor gl_FragColor\n";
+    return head + FS_SOURCE;
+  }
+  function compile(gl, type, src) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || "shader compile failed");
+    return sh;
+  }
+  function makeProgram(gl, is2) {
+    var prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, shaderSrc(is2, "vs")));
+    gl.attachShader(prog, compile(gl, gl.FRAGMENT_SHADER, shaderSrc(is2, "fs")));
+    gl.bindAttribLocation(prog, 0, "aPos");
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || "program link failed");
+    return prog;
+  }
+  var gl = null, isWebGL2 = false, prog = null, uniforms = {}, freqTex = null, freqData = new Uint8Array(256 * 4);
+  function setError(msg) {
+    document.body.dataset.glError = msg || "";
+    if (msg) { glError.hidden = false; glError.textContent = msg; }
+    else { glError.hidden = true; glError.textContent = ""; }
+  }
+  function loc(name) {
+    if (!(name in uniforms)) uniforms[name] = gl.getUniformLocation(prog, name);
+    return uniforms[name];
+  }
+
+  function makeScrollerCanvas() {
+    var c = document.createElement("canvas");
+    c.width = 2048; c.height = 64;
+    var ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    var font = {
+      " ": [0,0,0,0,0],
+      "A": [0x3e,0x09,0x09,0x09,0x3e], "B": [0x3f,0x25,0x25,0x25,0x1a], "C": [0x1e,0x21,0x21,0x21,0x12],
+      "D": [0x3f,0x21,0x21,0x21,0x1e], "E": [0x3f,0x25,0x25,0x25,0x21], "F": [0x3f,0x05,0x05,0x05,0x01],
+      "G": [0x1e,0x21,0x25,0x25,0x1d], "H": [0x3f,0x04,0x04,0x04,0x3f], "I": [0x21,0x21,0x3f,0x21,0x21],
+      "J": [0x10,0x20,0x20,0x20,0x1f], "K": [0x3f,0x04,0x0a,0x11,0x20], "L": [0x3f,0x20,0x20,0x20,0x20],
+      "M": [0x3f,0x02,0x04,0x02,0x3f], "N": [0x3f,0x02,0x04,0x08,0x3f], "O": [0x1e,0x21,0x21,0x21,0x1e],
+      "P": [0x3f,0x09,0x09,0x09,0x06], "Q": [0x1e,0x21,0x29,0x11,0x2e], "R": [0x3f,0x09,0x19,0x29,0x26],
+      "S": [0x16,0x25,0x25,0x25,0x19], "T": [0x01,0x01,0x3f,0x01,0x01], "U": [0x1f,0x20,0x20,0x20,0x1f],
+      "V": [0x0f,0x10,0x20,0x10,0x0f], "W": [0x3f,0x10,0x08,0x10,0x3f], "X": [0x31,0x0a,0x04,0x0a,0x31],
+      "Y": [0x07,0x08,0x30,0x08,0x07], "Z": [0x31,0x29,0x25,0x23,0x21],
+      "0": [0x1e,0x29,0x25,0x23,0x1e], "1": [0x00,0x21,0x3f,0x20,0x00], "2": [0x32,0x29,0x29,0x29,0x26],
+      "3": [0x12,0x21,0x25,0x25,0x1a], "4": [0x0c,0x0a,0x09,0x3f,0x08], "5": [0x17,0x25,0x25,0x25,0x19],
+      "6": [0x1e,0x25,0x25,0x25,0x18], "7": [0x01,0x01,0x39,0x05,0x03], "8": [0x1a,0x25,0x25,0x25,0x1a],
+      "9": [0x06,0x29,0x29,0x29,0x1e],
+      "-": [0x04,0x04,0x04,0x04,0x04], ".": [0x00,0x00,0x20,0x00,0x00], "!": [0x00,0x00,0x2f,0x00,0x00],
+      "/": [0x20,0x10,0x08,0x04,0x02], ":": [0x00,0x00,0x12,0x00,0x00]
+    };
+    var msg = "    GREETZ TO GHUNTLEY // LABS.GHUNTLEY.COM // SUPER ACID BROS // WARP ZONE FOREVER // 140 BPM JB-303 TRANCE // STARMAN OVERDRIVE // ITS-A ME // 1-UP HALLUCINATION // QUESTION BLOCK CATHEDRAL // BOWSER RAVE // NO EMUS JUST SDF // COINS TO THE MOON // PIPE DREAM 1990-2026 // MUSHROOM KINGDOM FEVER //    ";
+    var x = 8, col, row, bits, ch, i, glyph, px = 3, py = 3;
+    for (i = 0; i < msg.length; i++) {
+      ch = msg.charAt(i);
+      glyph = font[ch] || font[" "];
+      for (col = 0; col < 5; col++) {
+        bits = glyph[col];
+        for (row = 0; row < 7; row++) {
+          if (bits & (1 << row)) {
+            ctx.fillStyle = row < 2 ? "#fff3c4" : "#f8d000";
+            ctx.fillRect(x + col * px, 12 + row * py, px, py);
+            ctx.fillStyle = "rgba(255,255,255,0.35)";
+            ctx.fillRect(x + col * px, 12 + row * py, px, 1);
+          }
+        }
+      }
+      x += 5 * px + px;
+      if (x > c.width - 40) break;
+    }
+    return c;
+  }
+  function initGL() {
+    var opts = { alpha: false, antialias: false, depth: false, stencil: false, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" };
+    gl = canvas.getContext("webgl2", opts);
+    if (gl) isWebGL2 = true;
+    else { gl = canvas.getContext("webgl", opts) || canvas.getContext("experimental-webgl", opts); isWebGL2 = false; }
+    if (!gl) throw new Error("WebGL is not available");
+    prog = makeProgram(gl, isWebGL2);
+    gl.useProgram(prog);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    freqTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, freqTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, freqData);
+    gl.uniform1i(loc("uFreq"), 0);
+    cam.tex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, cam.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(16));
+    gl.uniform1i(loc("uCamTex"), 1);
+    scrollCanvas = makeScrollerCanvas();
+    scrollTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, scrollTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scrollCanvas);
+    gl.uniform1i(loc("uScrollTex"), 2);
+    gl.activeTexture(gl.TEXTURE0);
+    document.body.dataset.renderer = isWebGL2 ? "webgl2" : "webgl";
+  }
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    var h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      if (gl) gl.viewport(0, 0, w, h);
+    }
+  }
+  var audio = {
+    ctx: null, master: null, analyser: null,
+    kickGain: null, subGain: null, hatGain: null, clapGain: null, snareGain: null,
+    acidGain: null, sawGain: null, arpGain: null,
+    acidOsc: null, acidOscSq: null, acidFilter1: null, acidFilter2: null, acidGate: null, acidShaper: null,
+    sawOscs: [], sawFilter: null, sawL: null, sawR: null,
+    arpOsc: null, arpOsc2: null, arpFilter: null, arpGate: null,
+    delay: null, delay2: null, noiseBuf: null,
+    timer: null, nextNote: 0, step: 0, absStep: 0, lastAcid: 33, pattern: null,
+    freqA: new Uint8Array(1024), waveA: new Uint8Array(1024)
+  };
+  function makeNoiseBuffer(ctx) {
+    var n = ctx.sampleRate * 1, buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0), i;
+    for (i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function makeDriveCurve(amount) {
+    var n = 1024, curve = new Float32Array(n), k = 1 + amount * 18, i, x;
+    for (i = 0; i < n; i++) { x = (i / (n - 1)) * 2 - 1; curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x)); }
+    return curve;
+  }
+  function slider(id) {
+    var el = sliders[id];
+    return L.clamp(Number(el.value), Number(el.min), Number(el.max));
+  }
+  function rebuildPattern() { audio.pattern = L.buildAcidPattern(seedState.value >>> 0); }
+
+  function setupAudio() {
+    if (audio.ctx) return audio.ctx;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) throw new Error("Web Audio API is not available");
+    var ctx = new Ctx();
+    var master = ctx.createGain();
+    master.gain.value = slider("volume");
+    var comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.knee.value = 18; comp.ratio.value = 4.2;
+    comp.attack.value = 0.003; comp.release.value = 0.16;
+    var analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.55;
+    master.connect(comp); comp.connect(analyser); analyser.connect(ctx.destination);
+    function bus(v) { var g = ctx.createGain(); g.gain.value = v; g.connect(master); return g; }
+    var delay = ctx.createDelay(1.0);
+    delay.delayTime.value = (60 / 140) * 0.75;
+    var fb = ctx.createGain(); fb.gain.value = 0.42;
+    var delayHp = ctx.createBiquadFilter(); delayHp.type = "highpass"; delayHp.frequency.value = 220;
+    var delayLp = ctx.createBiquadFilter(); delayLp.type = "lowpass"; delayLp.frequency.value = 6500;
+    var delayGain = ctx.createGain(); delayGain.gain.value = 0.38;
+    delay.connect(fb); fb.connect(delayHp); delayHp.connect(delayLp); delayLp.connect(delay); delayLp.connect(delayGain); delayGain.connect(master);
+    var delay2 = ctx.createDelay(1.0);
+    delay2.delayTime.value = (60 / 140) * 0.5;
+    var fb2 = ctx.createGain(); fb2.gain.value = 0.22;
+    var d2g = ctx.createGain(); d2g.gain.value = 0.18;
+    delay2.connect(fb2); fb2.connect(delay2); delay2.connect(d2g); d2g.connect(master);
+    var kickGain = bus(1.15), subGain = bus(0.7), hatGain = bus(0.28), clapGain = bus(0.55), snareGain = bus(0.42);
+    var acidGain = ctx.createGain(); acidGain.gain.value = 0.55; acidGain.connect(master); acidGain.connect(delay);
+    var sawGain = ctx.createGain(); sawGain.gain.value = 0.22;
+    var sawFilter = ctx.createBiquadFilter(); sawFilter.type = "lowpass"; sawFilter.frequency.value = 1800; sawFilter.Q.value = 0.7;
+    var merger = ctx.createChannelMerger(2);
+    var sawL = ctx.createGain(), sawR = ctx.createGain();
+    sawL.gain.value = 1; sawR.gain.value = 1;
+    sawL.connect(merger, 0, 0); sawR.connect(merger, 0, 1);
+    merger.connect(sawFilter); sawFilter.connect(sawGain); sawGain.connect(master); sawGain.connect(delay); sawGain.connect(delay2);
+    var sawOscs = [], detunes = [-17, -9, -3, 3, 9, 17, 25], i, osc, pan;
+    for (i = 0; i < 7; i++) {
+      osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = L.midiToFreq(45); osc.detune.value = detunes[i];
+      pan = ctx.createGain(); pan.gain.value = 0.9; osc.connect(pan);
+      if (i % 2 === 0) pan.connect(sawL); else pan.connect(sawR);
+      osc.start(); sawOscs.push(osc);
+    }
+    var arpOsc = ctx.createOscillator(); arpOsc.type = "sawtooth"; arpOsc.frequency.value = L.midiToFreq(57);
+    var arpOsc2 = ctx.createOscillator(); arpOsc2.type = "sawtooth"; arpOsc2.detune.value = 7; arpOsc2.frequency.value = L.midiToFreq(57);
+    var arpFilter = ctx.createBiquadFilter(); arpFilter.type = "lowpass"; arpFilter.frequency.value = 2400; arpFilter.Q.value = 1.2;
+    var arpGate = ctx.createGain(); arpGate.gain.value = 0.0001;
+    var arpGain = ctx.createGain(); arpGain.gain.value = 0.22;
+    arpOsc.connect(arpFilter); arpOsc2.connect(arpFilter); arpFilter.connect(arpGate); arpGate.connect(arpGain);
+    arpGain.connect(master); arpGain.connect(delay); arpOsc.start(); arpOsc2.start();
+    var shaper = ctx.createWaveShaper(); shaper.curve = makeDriveCurve(slider("drive")); shaper.oversample = "2x";
+    var f1 = ctx.createBiquadFilter(); f1.type = "lowpass"; f1.frequency.value = 600; f1.Q.value = 12;
+    var f2 = ctx.createBiquadFilter(); f2.type = "lowpass"; f2.frequency.value = 800; f2.Q.value = 8;
+    var gate = ctx.createGain(); gate.gain.value = 0.0001;
+    var oscA = ctx.createOscillator(); oscA.type = "sawtooth"; oscA.frequency.value = L.midiToFreq(33);
+    var oscB = ctx.createOscillator(); oscB.type = "square"; oscB.frequency.value = L.midiToFreq(33);
+    var sqG = ctx.createGain(); sqG.gain.value = 0.35;
+    oscA.connect(f1); oscB.connect(sqG); sqG.connect(f1); f1.connect(f2); f2.connect(shaper); shaper.connect(gate); gate.connect(acidGain);
+    oscA.start(); oscB.start();
+    var lfo = ctx.createOscillator(); var lfoG = ctx.createGain();
+    lfo.frequency.value = 0.125; lfoG.gain.value = 420; lfo.connect(lfoG); lfoG.connect(f1.frequency); lfo.start();
+    audio.ctx = ctx; audio.master = master; audio.analyser = analyser;
+    audio.kickGain = kickGain; audio.subGain = subGain; audio.hatGain = hatGain; audio.clapGain = clapGain; audio.snareGain = snareGain;
+    audio.acidGain = acidGain; audio.sawGain = sawGain; audio.arpGain = arpGain;
+    audio.acidOsc = oscA; audio.acidOscSq = oscB; audio.acidFilter1 = f1; audio.acidFilter2 = f2; audio.acidGate = gate; audio.acidShaper = shaper;
+    audio.sawOscs = sawOscs; audio.sawFilter = sawFilter; audio.sawL = sawL; audio.sawR = sawR;
+    audio.arpOsc = arpOsc; audio.arpOsc2 = arpOsc2; audio.arpFilter = arpFilter; audio.arpGate = arpGate;
+    audio.delay = delay; audio.delay2 = delay2; audio.noiseBuf = makeNoiseBuffer(ctx);
+    audio.nextNote = 0; audio.step = 0; audio.absStep = 0;
+    return ctx;
+  }
+  function scheduleKick(time) {
+    var ctx = audio.ctx;
+    var sub = ctx.createOscillator(), subG = ctx.createGain();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(160, time); sub.frequency.exponentialRampToValueAtTime(42, time + 0.12);
+    subG.gain.setValueAtTime(1.1, time); subG.gain.exponentialRampToValueAtTime(0.001, time + 0.38);
+    sub.connect(subG); subG.connect(audio.kickGain); sub.start(time); sub.stop(time + 0.42);
+    var punch = ctx.createOscillator(), punchG = ctx.createGain();
+    punch.type = "triangle";
+    punch.frequency.setValueAtTime(280, time); punch.frequency.exponentialRampToValueAtTime(70, time + 0.04);
+    punchG.gain.setValueAtTime(0.45, time); punchG.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    punch.connect(punchG); punchG.connect(audio.kickGain); punch.start(time); punch.stop(time + 0.1);
+    var nsrc = ctx.createBufferSource(); nsrc.buffer = audio.noiseBuf;
+    var nF = ctx.createBiquadFilter(); nF.type = "highpass"; nF.frequency.value = 1800;
+    var nG = ctx.createGain(); nG.gain.setValueAtTime(0.22, time); nG.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
+    nsrc.connect(nF); nF.connect(nG); nG.connect(audio.kickGain); nsrc.start(time); nsrc.stop(time + 0.03);
+  }
+  function scheduleSub(time, freq) {
+    var ctx = audio.ctx, osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = "sine"; osc.frequency.setValueAtTime(freq, time);
+    g.gain.setValueAtTime(0.0001, time); g.gain.exponentialRampToValueAtTime(0.9, time + 0.02); g.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+    osc.connect(g); g.connect(audio.subGain); osc.start(time); osc.stop(time + 0.32);
+  }
+  function scheduleHat(time, open, gain) {
+    var ctx = audio.ctx, src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+    var hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = open ? 5000 : 7000;
+    var bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = open ? 8000 : 9000; bp.Q.value = open ? 0.7 : 1.4;
+    var g = ctx.createGain(); g.gain.setValueAtTime(gain, time); g.gain.exponentialRampToValueAtTime(0.001, time + (open ? 0.22 : 0.045));
+    src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(audio.hatGain); src.start(time); src.stop(time + (open ? 0.24 : 0.06));
+  }
+  function scheduleClap(time) {
+    var ctx = audio.ctx, i, src, g, f, off;
+    for (i = 0; i < 4; i++) {
+      off = i * 0.012;
+      src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+      f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1800 + i * 400; f.Q.value = 0.9;
+      g = ctx.createGain(); g.gain.setValueAtTime(0.9 * (1 - i * 0.15), time + off); g.gain.exponentialRampToValueAtTime(0.001, time + off + 0.16);
+      src.connect(f); f.connect(g); g.connect(audio.clapGain); src.start(time + off); src.stop(time + off + 0.2);
+    }
+  }
+  function scheduleSnare(time, gain) {
+    var ctx = audio.ctx, src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+    var bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800; bp.Q.value = 0.8;
+    var g = ctx.createGain(); g.gain.setValueAtTime(gain, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    src.connect(bp); bp.connect(g); g.connect(audio.snareGain); src.start(time); src.stop(time + 0.14);
+    var osc = ctx.createOscillator(), og = ctx.createGain();
+    osc.type = "triangle"; osc.frequency.setValueAtTime(210, time); osc.frequency.exponentialRampToValueAtTime(120, time + 0.08);
+    og.gain.setValueAtTime(gain * 0.5, time); og.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+    osc.connect(og); og.connect(audio.snareGain); osc.start(time); osc.stop(time + 0.12);
+  }
+  function scheduleAcid(time, step, stepDur) {
+    var pat = audio.pattern; if (!pat) return;
+    var st = pat.steps[step], ctx = audio.ctx, freq;
+    if (st.rest) {
+      audio.acidGate.gain.cancelScheduledValues(time);
+      audio.acidGate.gain.setTargetAtTime(0.0001, time, 0.02);
+      return;
+    }
+    freq = L.midiToFreq(st.note);
+    if (st.slide) {
+      audio.acidOsc.frequency.cancelScheduledValues(time);
+      audio.acidOsc.frequency.setValueAtTime(L.midiToFreq(audio.lastAcid), time);
+      audio.acidOsc.frequency.exponentialRampToValueAtTime(Math.max(20, freq), time + stepDur * 0.92);
+      audio.acidOscSq.frequency.cancelScheduledValues(time);
+      audio.acidOscSq.frequency.setValueAtTime(L.midiToFreq(audio.lastAcid), time);
+      audio.acidOscSq.frequency.exponentialRampToValueAtTime(Math.max(20, freq), time + stepDur * 0.92);
+    } else {
+      audio.acidOsc.frequency.cancelScheduledValues(time);
+      audio.acidOsc.frequency.setValueAtTime(freq, time);
+      audio.acidOscSq.frequency.setValueAtTime(freq, time);
+    }
+    audio.lastAcid = st.note;
+    var amp = st.accent ? 0.95 : 0.55;
+    audio.acidGate.gain.cancelScheduledValues(time);
+    audio.acidGate.gain.setValueAtTime(0.0001, time);
+    audio.acidGate.gain.exponentialRampToValueAtTime(amp, time + 0.008);
+    audio.acidGate.gain.exponentialRampToValueAtTime(0.0001, time + (st.accent ? 0.14 : 0.22));
+    var cut = L.clamp(slider("cutoff") + interactNudge * 0.28, 0, 1);
+    var res = L.clamp(slider("resonance") + pointerEnergy * 0.08, 0, 1);
+    var base = 180 + cut * 5200;
+    var env = (st.accent ? 4200 : 2200) * (0.55 + cut);
+    var startF = Math.min(12000, base + env);
+    var endF = Math.max(90, base * 0.32);
+    audio.acidFilter1.Q.setTargetAtTime(4 + res * 16, time, 0.02);
+    audio.acidFilter2.Q.setTargetAtTime(3 + res * 10, time, 0.02);
+    audio.acidFilter1.frequency.cancelScheduledValues(time);
+    audio.acidFilter1.frequency.setValueAtTime(startF, time);
+    audio.acidFilter1.frequency.exponentialRampToValueAtTime(endF, time + 0.16);
+    audio.acidFilter2.frequency.setValueAtTime(Math.min(14000, startF * 1.2), time);
+    audio.acidFilter2.frequency.exponentialRampToValueAtTime(Math.max(120, endF * 1.1), time + 0.16);
+  }
+
+  function tickAudio() {
+    if (!audio.ctx || !audioOn || audio.ctx.state !== "running") return;
+    var ctx = audio.ctx, bpm = slider("bpm"), stepDur = 60 / bpm / 4, ahead = 0.12;
+    if (audio.nextNote < ctx.currentTime) audio.nextNote = ctx.currentTime + 0.02;
+    while (audio.nextNote < ctx.currentTime + ahead) {
+      var step = audio.step, t = audio.nextNote, abs = audio.absStep;
+      var bar16 = Math.floor(abs / 4) % 16, isBuild = bar16 >= 12, isDrop = bar16 < 2;
+      if (abs % (16 * 16) === 0 && abs > 0) {
+        audio.pattern = L.buildAcidPattern((seedState.value ^ ((Math.floor(abs / (16 * 16)) * 0x9e3779b9) >>> 0)) >>> 0);
+      }
+      if (step % 4 === 0) scheduleKick(t);
+      if (step % 4 === 2) scheduleSub(t, L.midiToFreq((audio.pattern ? audio.pattern.root : 33) - 12));
+      if (step % 2 === 1) scheduleHat(t, step % 16 === 15, step % 16 === 15 ? 0.7 : 0.38);
+      else scheduleHat(t, false, isBuild ? 0.28 : 0.14);
+      if (step === 4 || step === 12) scheduleClap(t);
+      if (isBuild || sceneCross > 0.05) scheduleSnare(t, 0.18 + (isBuild ? (bar16 - 12) * 0.12 : sceneCross * 0.45));
+      scheduleAcid(t, step, stepDur);
+      if (audio.arpOsc && audio.pattern) {
+        var arp = audio.pattern.arp, chord = audio.pattern.chord;
+        var deg = arp[abs % arp.length];
+        var baseMidi = audio.pattern.root + 24 + deg;
+        if (isDrop) baseMidi -= 12;
+        var af = Math.max(40, L.midiToFreq(baseMidi));
+        audio.arpOsc.frequency.setValueAtTime(af, t);
+        if (audio.arpOsc2) audio.arpOsc2.frequency.setValueAtTime(af * 2.0, t);
+        var ag = 0.0001 + slider("supersaw") * (isBuild ? 0.9 : 0.55);
+        audio.arpGate.gain.cancelScheduledValues(t);
+        audio.arpGate.gain.setValueAtTime(0.0001, t);
+        audio.arpGate.gain.exponentialRampToValueAtTime(ag, t + 0.01);
+        audio.arpGate.gain.exponentialRampToValueAtTime(0.0001, t + stepDur * 0.85);
+        audio.arpFilter.frequency.setTargetAtTime(Math.min(12000, 400 + slider("supersaw") * (1800 + bar16 * 450) * (isBuild ? 1.6 : 1)), t, 0.04);
+        if (audio.sawOscs && audio.sawOscs.length) {
+          var c0 = L.midiToFreq(audio.pattern.root + 12 + chord[0]);
+          var c1 = L.midiToFreq(audio.pattern.root + 12 + chord[1 % chord.length]);
+          var c2 = L.midiToFreq(audio.pattern.root + 12 + chord[2 % chord.length]);
+          var freqs = [c0, c1, c2, c0 * 2, c1 * 2, c2, c0], si;
+          for (si = 0; si < audio.sawOscs.length; si++) audio.sawOscs[si].frequency.setTargetAtTime(freqs[si % freqs.length], t, 0.06);
+        }
+        if (audio.sawFilter) audio.sawFilter.frequency.setTargetAtTime(Math.min(14000, 500 + slider("supersaw") * (900 + bar16 * 520) * (isBuild ? 1.8 : 1)), t, 0.08);
+        if (audio.sawGain) audio.sawGain.gain.setTargetAtTime(0.06 + slider("supersaw") * (isDrop ? 0.32 : 0.22), t, 0.05);
+      }
+      if (audio.delay) audio.delay.delayTime.setTargetAtTime((60 / bpm) * 0.75, t, 0.05);
+      if (audio.delay2) audio.delay2.delayTime.setTargetAtTime((60 / bpm) * 0.5, t, 0.05);
+      if (audio.acidShaper) audio.acidShaper.curve = makeDriveCurve(slider("drive"));
+      audio.nextNote += stepDur;
+      audio.step = (step + 1) % 16;
+      audio.absStep = abs + 1;
+    }
+  }
+
+  var UNLOCK_EVENTS = ["pointerdown", "mousedown", "touchstart", "click", "keydown"];
+  var wantAudio = true;
+  function ctxRunning() { return !!(audio.ctx && audio.ctx.state === "running"); }
+  function disarmGestureUnlock() {
+    if (!unlockBound) return;
+    for (var i = 0; i < UNLOCK_EVENTS.length; i++) window.removeEventListener(UNLOCK_EVENTS[i], onGestureUnlock, true);
+    unlockBound = false;
+  }
+  function onGestureUnlock(e) {
+    if (!wantAudio) return;
+    if (e && (e.type === "pointerdown" || e.type === "mousedown") && e.button && e.button !== 0) return;
+    if (ctxRunning() && audioOn) return;
+    startAudio();
+  }
+  function armGestureUnlock() {
+    if (unlockBound || (audioOn && ctxRunning())) return;
+    unlockBound = true;
+    for (var i = 0; i < UNLOCK_EVENTS.length; i++) window.addEventListener(UNLOCK_EVENTS[i], onGestureUnlock, true);
+    syncAudioUi();
+  }
+  function nudgeUnlock() {
+    if (!audio.ctx) return;
+    try { audio.ctx.resume(); } catch (e) { /* ignore */ }
+    try {
+      var src = audio.ctx.createBufferSource();
+      src.buffer = audio.ctx.createBuffer(1, 1, audio.ctx.sampleRate);
+      var g = audio.ctx.createGain(); g.gain.value = 0;
+      src.connect(g); g.connect(audio.ctx.destination); src.start(0);
+    } catch (e2) { /* ignore */ }
+  }
+  function watchContext() {
+    if (!audio.ctx || audio.ctx._warpZoneWatched) return;
+    audio.ctx._warpZoneWatched = true;
+    audio.ctx.addEventListener("statechange", function () {
+      if (!wantAudio) { syncAudioUi(); return; }
+      if (ctxRunning()) beginPlayback();
+      else armGestureUnlock();
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (wantAudio && document.visibilityState === "visible") startAudio();
+    });
+    window.addEventListener("focus", function () { if (wantAudio) startAudio(); });
+  }
+  function beginPlayback() {
+    if (!audio.ctx || audio.ctx.state !== "running") { armGestureUnlock(); syncAudioUi(); return; }
+    var now = audio.ctx.currentTime, vol = slider("volume");
+    if (!Number.isFinite(vol) || vol <= 0) vol = 0.72;
+    audio.master.gain.cancelScheduledValues(now);
+    audio.master.gain.setValueAtTime(vol, now);
+    if (!audioOn) { audioOn = true; audio.nextNote = now + 0.02; audio.step = 0; }
+    if (!audio.timer) audio.timer = setInterval(tickAudio, 25);
+    tickAudio();
+    disarmGestureUnlock();
+    syncAudioUi();
+  }
+  function startAudio() {
+    wantAudio = true;
+    try { setupAudio(); } catch (err) { setError(String(err && err.message ? err.message : err)); armGestureUnlock(); return; }
+    watchContext();
+    rebuildPattern();
+    nudgeUnlock();
+    var p;
+    try { p = audio.ctx.resume(); } catch (err) { armGestureUnlock(); syncAudioUi(); return; }
+    if (ctxRunning()) beginPlayback();
+    else armGestureUnlock();
+    Promise.resolve(p).then(function () { if (wantAudio) beginPlayback(); }).catch(function () { if (wantAudio) armGestureUnlock(); syncAudioUi(); });
+  }
+  function stopAudio() {
+    wantAudio = false; audioOn = false; disarmGestureUnlock();
+    if (audio.timer) { clearInterval(audio.timer); audio.timer = null; }
+    if (audio.ctx && audio.acidGate) {
+      try {
+        var t = audio.ctx.currentTime;
+        audio.acidGate.gain.cancelScheduledValues(t);
+        audio.acidGate.gain.setTargetAtTime(0.0001, t, 0.03);
+        if (audio.arpGate) audio.arpGate.gain.setTargetAtTime(0.0001, t, 0.03);
+        audio.master.gain.cancelScheduledValues(t);
+        audio.master.gain.setTargetAtTime(0.0001, t, 0.03);
+        setTimeout(function () {
+          if (audio.ctx && !wantAudio) {
+            audio.master.gain.setValueAtTime(slider("volume"), audio.ctx.currentTime);
+            audio.ctx.suspend();
+          }
+        }, 80);
+      } catch (e) { /* ignore */ }
+    }
+    syncAudioUi();
+  }
+  function toggleAudio() { if (audioOn && ctxRunning()) stopAudio(); else startAudio(); }
+  function syncAudioUi() {
+    var on = !!(audioOn && ctxRunning());
+    document.body.dataset.audio = on ? "on" : "off";
+    audioToggle.setAttribute("aria-pressed", on ? "true" : "false");
+    audioToggle.textContent = on ? "Stop Synth" : "Start Synth";
+    if (hint) {
+      if (on) hint.hidden = true;
+      else if (wantAudio) { hint.hidden = false; hint.textContent = "tap or press a key to unmute"; }
+      else hint.hidden = true;
+    }
+  }
+  function updateVolume() {
+    if (audio.master && audio.ctx) audio.master.gain.setTargetAtTime(slider("volume"), audio.ctx.currentTime, 0.03);
+  }
+  function syncHash() {
+    var next = L.seedHashString(seedState.display) + "&scene=" + String(sceneIndex + 1);
+    if (location.hash !== next) {
+      if (history.replaceState) history.replaceState(null, "", location.pathname + location.search + next);
+      else location.hash = next.slice(1);
+    }
+  }
+  function applySeed(parsed, pushHash) {
+    if (!parsed || !parsed.ok) return;
+    seedState = { display: parsed.display, value: parsed.value >>> 0 };
+    seedInput.value = seedState.display;
+    document.body.dataset.seed = String(seedState.value);
+    if (pushHash !== false) syncHash();
+    rebuildPattern();
+  }
+  function randomizeSeed() {
+    sceneIndex = 0; sceneStartBeat = visual.beat || 0; sceneCross = 0;
+    applySeed(L.randomSeed(), true); syncSceneUi();
+  }
+  function loadFromUrl() {
+    var loc = location, hash = String(loc.hash || "").replace(/^#/, ""), params = new URLSearchParams(hash);
+    if (!params.has("seed") && !params.has("scene")) params = new URLSearchParams(String(loc.search || "").replace(/^\?/, ""));
+    var fromUrl = L.readSeedFromLocation(loc);
+    if (fromUrl && fromUrl.ok) applySeed(fromUrl, false);
+    else applySeed(L.randomSeed(), false);
+    var sc = parseInt(params.get("scene") || "1", 10);
+    sceneIndex = (Number.isFinite(sc) && sc >= 1) ? sc - 1 : 0;
+    sceneStartBeat = 0; sceneCross = 0; syncHash(); syncSceneUi();
+  }
+  function syncSceneUi() {
+    var label = "#" + String(sceneIndex + 1);
+    sceneNum.textContent = label; sceneChip.textContent = label;
+    sceneAutoEl.checked = sceneAuto;
+    document.body.dataset.scene = String(sceneIndex);
+    document.body.dataset.sceneAuto = sceneAuto ? "1" : "0";
+  }
+  function goScene(next, resetClock) {
+    sceneIndex = Math.max(0, next | 0);
+    if (resetClock !== false) { sceneStartBeat = visual.beat || 0; sceneCross = 0; }
+    syncHash(); syncSceneUi();
+  }
+  function updateScene(beat) {
+    if (!sceneAuto) { sceneCross = 0; return; }
+    var hold = sceneHoldBars * 4, fade = sceneFadeBars * 4, t = beat - sceneStartBeat;
+    if (t < 0) { sceneStartBeat = beat; t = 0; }
+    if (t >= hold) {
+      var jumped = Math.floor(t / hold);
+      sceneIndex += jumped; sceneStartBeat += jumped * hold; t = beat - sceneStartBeat;
+    }
+    sceneCross = t >= hold - fade ? L.clamp((t - (hold - fade)) / fade, 0, 1) : 0;
+    syncSceneUi();
+  }
+  function setHud(open) {
+    hudOpen = !!open;
+    hud.classList.toggle("collapsed", !hudOpen);
+    hudToggle.setAttribute("aria-expanded", hudOpen ? "true" : "false");
+    hudToggle.textContent = hudOpen ? "hide" : "H";
+    document.body.dataset.hud = hudOpen ? "open" : "closed";
+  }
+  function toggleHud() { setHud(!hudOpen); }
+  function toggleFullscreen() {
+    var el = document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen;
+    var leave = document.exitFullscreen || document.webkitExitFullscreen;
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) { if (leave) leave.call(document); }
+      else if (req) Promise.resolve(req.call(el)).catch(function () {});
+    } catch (e) { /* headless / denied */ }
+  }
+  function fmt(id) {
+    var v = slider(id), label = document.getElementById(id + "-val");
+    if (label) label.textContent = id === "bpm" ? String(Math.round(v)) : v.toFixed(2);
+    return v;
+  }
+  function bindSliders() {
+    Object.keys(sliders).forEach(function (id) {
+      sliders[id].addEventListener("input", function () { fmt(id); if (id === "volume") updateVolume(); });
+      fmt(id);
+    });
+  }
+
+  function isTypingTarget(el) {
+    if (!el) return false;
+    var tag = (el.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    return !!el.isContentEditable;
+  }
+  function onKey(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (isTypingTarget(e.target) && e.key !== "Escape" && e.key !== "Enter") {
+      if (e.key === "Enter" && e.target === seedInput) e.target.blur();
+      return;
+    }
+    var k = e.key;
+    if (k === "h" || k === "H") { e.preventDefault(); toggleHud(); }
+    else if (k === " " || k === "Spacebar") { e.preventDefault(); toggleAudio(); }
+    else if (k === "r" || k === "R") { e.preventDefault(); randomizeSeed(); }
+    else if (k === "f" || k === "F") { e.preventDefault(); toggleFullscreen(); }
+    else if (k === "c" || k === "C") { e.preventDefault(); toggleCamera(); }
+    else if (k === "[" || k === "{") { e.preventDefault(); goScene(sceneIndex - 1, true); }
+    else if (k === "]" || k === "}") { e.preventDefault(); goScene(sceneIndex + 1, true); }
+    else if (k === "Escape" && isTypingTarget(e.target)) e.target.blur();
+  }
+  function isUiEvent(e) {
+    var t = e.target;
+    if (!t || !t.closest) return false;
+    if (t.closest("#hint, #cam-fab, #gl-error")) return true;
+    if (t.closest("#hud")) return hudOpen || !!t.closest("button, input, a, label, select, textarea");
+    return false;
+  }
+  function pointerFromEvent(e) {
+    var r = canvas.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return null;
+    return [((e.clientX - r.left) / r.width - 0.5) * 2, (0.5 - (e.clientY - r.top) / r.height) * 2];
+  }
+  function applyPointer(e, isDown) {
+    var p = pointerFromEvent(e); if (!p) return;
+    var now = performance.now();
+    if (lastPtr[2]) {
+      var dt = Math.max(0.008, (now - lastPtr[2]) / 1000);
+      var vx = (p[0] - lastPtr[0]) / dt, vy = (p[1] - lastPtr[1]) / dt;
+      pointerVel[0] = pointerVel[0] * 0.55 + vx * 0.08;
+      pointerVel[1] = pointerVel[1] * 0.55 + vy * 0.08;
+      pointerEnergy = Math.min(2.5, Math.hypot(pointerVel[0], pointerVel[1]));
+    }
+    mouseT[0] = p[0]; mouseT[1] = p[1]; lastPtr[0] = p[0]; lastPtr[1] = p[1]; lastPtr[2] = now;
+    if (isDown) pointerDown = 1;
+  }
+  function triggerPulse(e) {
+    var p = pointerFromEvent(e) || [mouse[0], mouse[1]];
+    pulsePos[0] = p[0]; pulsePos[1] = p[1];
+    pulseAmp = Math.min(1.4, pulseAmp + 1);
+  }
+  function touchDist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); }
+  function touchAngle(a, b) { return Math.atan2(b.clientY - a.clientY, b.clientX - a.clientX); }
+  function onPointer(e) { if (isUiEvent(e)) return; applyPointer(e, e.buttons > 0 || e.pressure > 0); }
+  function onPointerDown(e) {
+    if (isUiEvent(e)) return;
+    if (e.button && e.button !== 0) return;
+    applyPointer(e, true); pointerDown = 1; triggerPulse(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  }
+  function onPointerUp(e) { if (e.button && e.button !== 0) return; pointerDown = 0; }
+  function onWheel(e) {
+    if (isUiEvent(e)) return;
+    e.preventDefault();
+    zoomT = L.clamp(zoomT - e.deltaY * 0.0016, -1.8, 2.4);
+    twistV += (e.deltaX * 0.0018) + ((e.shiftKey ? e.deltaY : 0) * 0.0012);
+  }
+  function onTouchStart(e) {
+    if (isUiEvent(e)) return;
+    if (e.touches.length >= 2) {
+      e.preventDefault();
+      pinch.active = true;
+      pinch.dist = Math.max(1, touchDist(e.touches[0], e.touches[1]));
+      pinch.angle = touchAngle(e.touches[0], e.touches[1]);
+      pinch.zoom = zoomT; pinch.twist = twist; pointerDown = 1;
+    }
+  }
+  function onTouchMove(e) {
+    if (isUiEvent(e)) return;
+    if (e.touches.length >= 2 && pinch.active) {
+      e.preventDefault();
+      var d = Math.max(1, touchDist(e.touches[0], e.touches[1]));
+      var a = touchAngle(e.touches[0], e.touches[1]);
+      zoomT = L.clamp(pinch.zoom + Math.log(d / pinch.dist) * 1.15, -1.8, 2.4);
+      twist = pinch.twist + (a - pinch.angle) * 1.4;
+    }
+  }
+  function onTouchEnd(e) {
+    if (e.touches.length < 2) pinch.active = false;
+    if (e.touches.length === 0) pointerDown = 0;
+  }
+  function syncCamUi() {
+    var on = !!cam.on;
+    [camFab, camToggle].forEach(function (el) {
+      if (!el) return;
+      el.setAttribute("aria-pressed", on ? "true" : "false");
+      el.textContent = on ? "cam on" : "cam";
+    });
+  }
+  function stopCamera() {
+    cam.on = false;
+    if (cam.stream) { cam.stream.getTracks().forEach(function (tr) { tr.stop(); }); cam.stream = null; }
+    if (camVideo) camVideo.srcObject = null;
+    cam.motion = 0; cam.energy = 0; syncCamUi();
+  }
+  function startCamera() {
+    if (cam.starting || cam.on) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { syncCamUi(); return; }
+    cam.starting = true;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 360 } }, audio: false }).then(function (stream) {
+      cam.stream = stream; camVideo.srcObject = stream; camVideo.playsInline = true; camVideo.muted = true;
+      return camVideo.play();
+    }).then(function () { cam.on = true; cam.prev = null; }).catch(function () { stopCamera(); }).then(function () { cam.starting = false; syncCamUi(); });
+  }
+  function toggleCamera() { if (cam.on || cam.starting) stopCamera(); else startCamera(); }
+  function updateCamera(dt) {
+    if (!cam.on || !gl || !cam.tex || !camVideo || camVideo.readyState < 2) { cam.motion *= 0.9; cam.energy *= 0.9; return; }
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, cam.tex);
+    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, camVideo); } catch (e) { /* next frame */ }
+    gl.activeTexture(gl.TEXTURE0);
+    camMctx.drawImage(camVideo, 0, 0, 64, 36);
+    var img = camMctx.getImageData(0, 0, 64, 36).data;
+    var energy = 0, mx = 0, my = 0, w = 0, i, x, y, luma, d, prev;
+    if (cam.prev) {
+      for (y = 0; y < 36; y++) {
+        for (x = 0; x < 64; x++) {
+          i = (y * 64 + x) * 4;
+          luma = 0.299 * img[i] + 0.587 * img[i + 1] + 0.114 * img[i + 2];
+          prev = cam.prev[y * 64 + x]; d = Math.abs(luma - prev);
+          if (d > 16) { energy += d; mx += (63 - x) * d; my += y * d; w += d; }
+        }
+      }
+    }
+    var buf = cam.prev || new Float32Array(64 * 36);
+    for (y = 0; y < 36; y++) {
+      for (x = 0; x < 64; x++) {
+        i = (y * 64 + x) * 4;
+        buf[y * 64 + x] = 0.299 * img[i] + 0.587 * img[i + 1] + 0.114 * img[i + 2];
+      }
+    }
+    cam.prev = buf;
+    var en = L.clamp(energy / (64 * 36 * 40), 0, 1);
+    cam.energy += (en - cam.energy) * (1 - Math.exp(-dt * 8));
+    cam.motion += (en - cam.motion) * (1 - Math.exp(-dt * 5));
+    if (w > 0) {
+      var cx = (mx / w) / 63 * 2 - 1, cy = 1 - (my / w) / 35 * 2;
+      cam.cx += (cx - cam.cx) * (1 - Math.exp(-dt * 7));
+      cam.cy += (cy - cam.cy) * (1 - Math.exp(-dt * 7));
+    }
+    if (en > 0.22 && en > cam.motion * 1.15) {
+      pulseAmp = Math.min(1.4, pulseAmp + en * 0.65);
+      pulsePos[0] += (cam.cx - pulsePos[0]) * 0.5;
+      pulsePos[1] += (cam.cy - pulsePos[1]) * 0.5;
+    }
+  }
+  function bandEnergy(arr, lo, hi) {
+    var s = 0, n = 0, i;
+    for (i = lo; i < hi && i < arr.length; i++) { s += arr[i]; n++; }
+    return n ? s / n / 255 : 0;
+  }
+  function updateAnalysis(dt, time, beat) {
+    var kick = Math.exp(-((beat % 1 + 1) % 1) * 7.5);
+    var lfoM = 0.5 + 0.5 * Math.sin(time * 2.15), lfoH = 0.5 + 0.5 * Math.sin(time * 5.05 + 1.2);
+    var ib = L.clamp(0.18 + kick * 0.82, 0, 1), im = L.clamp(0.15 + lfoM * 0.45, 0, 1), ih = L.clamp(0.08 + lfoH * 0.4, 0, 1);
+    var ab = 0, am = 0, ah = 0, i, v, nyquist, binHz;
+    if (audioOn && audio.analyser) {
+      audio.analyser.getByteFrequencyData(audio.freqA);
+      audio.analyser.getByteTimeDomainData(audio.waveA);
+      nyquist = (audio.ctx && audio.ctx.sampleRate) ? audio.ctx.sampleRate * 0.5 : 22050;
+      binHz = nyquist / audio.freqA.length;
+      ab = Math.pow(bandEnergy(audio.freqA, 1, Math.max(2, Math.floor(180 / binHz))), 0.65);
+      am = Math.pow(bandEnergy(audio.freqA, Math.floor(180 / binHz), Math.floor(1800 / binHz)), 0.7);
+      ah = Math.pow(bandEnergy(audio.freqA, Math.floor(1800 / binHz), Math.floor(8000 / binHz)), 0.75);
+    }
+    var k = 1 - Math.exp(-dt * 10);
+    visual.bass += (Math.max(ib * 0.65, ab) - visual.bass) * k;
+    visual.mid += (Math.max(im * 0.45, am) - visual.mid) * k;
+    visual.high += (Math.max(ih * 0.4, ah) - visual.high) * k;
+    visual.beat = beat;
+    for (i = 0; i < 256; i++) {
+      if (audioOn && audio.freqA.length) {
+        var idx = Math.min(audio.freqA.length - 1, Math.floor(Math.pow(i / 255, 1.4) * (audio.freqA.length - 1)));
+        v = audio.freqA[idx];
+      } else {
+        v = Math.floor(255 * L.clamp(0.15 + 0.75 * Math.exp(-Math.abs(i / 255 - kick * 0.2) * 8) + 0.2 * Math.sin(time * 3 + i * 0.2), 0, 1));
+      }
+      freqData[i * 4] = v;
+      freqData[i * 4 + 1] = audioOn && audio.waveA.length ? audio.waveA[Math.floor(i / 255 * (audio.waveA.length - 1))] : 128;
+      freqData[i * 4 + 2] = Math.floor(visual.bass * 255);
+      freqData[i * 4 + 3] = 255;
+    }
+    document.body.dataset.bass = visual.bass.toFixed(3);
+    document.body.dataset.mid = visual.mid.toFixed(3);
+    document.body.dataset.high = visual.high.toFixed(3);
+    document.body.dataset.beat = visual.beat.toFixed(3);
+  }
+  function drawSpectrum() {
+    var w = specCanvas.width, h = specCanvas.height, i, x, bar, v;
+    specCtx.fillStyle = "rgba(0,0,0,0.65)"; specCtx.fillRect(0, 0, w, h);
+    for (i = 0; i < 64; i++) {
+      v = freqData[Math.floor(i / 63 * 255) * 4] / 255;
+      bar = Math.max(1, v * (h - 2)); x = i * (w / 64);
+      specCtx.fillStyle = i < 8 ? "#e52521" : i < 28 ? "#f8d000" : "#5c94fc";
+      specCtx.globalAlpha = 0.55 + v * 0.45;
+      specCtx.fillRect(x + 1, h - bar - 1, Math.max(1, w / 64 - 2), bar);
+    }
+    specCtx.globalAlpha = 1;
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    resize();
+    var dt = Math.min(0.05, Math.max(0.001, (now - lastMs) / 1000));
+    lastMs = now;
+    var inst = 1 / dt;
+    fpsSmoothed = fpsSmoothed ? fpsSmoothed * 0.9 + inst * 0.1 : inst;
+    var fpsShow = Math.round(fpsSmoothed);
+    fpsEl.textContent = fpsShow + " fps";
+    document.body.dataset.fps = String(fpsShow);
+    var time = (now - startMs) / 1000, bpm = slider("bpm"), beat = (time * bpm) / 60;
+    mouse[0] += (mouseT[0] - mouse[0]) * (1 - Math.exp(-dt * 14));
+    mouse[1] += (mouseT[1] - mouse[1]) * (1 - Math.exp(-dt * 14));
+    pointerVel[0] *= Math.exp(-dt * 4.2); pointerVel[1] *= Math.exp(-dt * 4.2);
+    pointerEnergy *= Math.exp(-dt * 3.5);
+    pointerDown += ((pointerDown > 0.5 ? 1 : 0) - pointerDown) * (1 - Math.exp(-dt * 18));
+    pulseAmp *= Math.exp(-dt * 3.2);
+    zoom += (zoomT - zoom) * (1 - Math.exp(-dt * 8));
+    twistV *= Math.exp(-dt * 3.4); twist += twistV * dt;
+    var energy = Math.hypot(pointerVel[0], pointerVel[1]) + pointerEnergy + cam.energy;
+    var nudgeT = cam.on || energy > 0.02 || pointerDown > 0.2
+      ? L.clamp(energy * 0.22 + mouse[1] * 0.12 + cam.cy * cam.energy * 0.2, -0.45, 0.7) : 0;
+    interactNudge += (nudgeT - interactNudge) * (1 - Math.exp(-dt * 3.5));
+    if (audioOn && audio.acidFilter1 && audio.ctx && audio.ctx.state === "running") {
+      var liveCut = 180 + L.clamp(slider("cutoff") + interactNudge * 0.28, 0, 1) * 5200;
+      audio.acidFilter1.frequency.setTargetAtTime(liveCut, audio.ctx.currentTime, 0.08);
+    }
+    updateCamera(dt); updateScene(beat); updateAnalysis(dt, time, beat);
+    if (audioOn) tickAudio();
+    if (gl && prog) {
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, freqTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, freqData);
+      gl.useProgram(prog);
+      gl.uniform2f(loc("uRes"), canvas.width, canvas.height);
+      gl.uniform1f(loc("uTime"), time); gl.uniform1f(loc("uBeat"), beat);
+      gl.uniform1f(loc("uBass"), visual.bass); gl.uniform1f(loc("uMid"), visual.mid); gl.uniform1f(loc("uHigh"), visual.high);
+      gl.uniform1f(loc("uSeed"), seedState.value); gl.uniform1f(loc("uSpeed"), slider("speed")); gl.uniform1f(loc("uReact"), 1.0);
+      gl.uniform1f(loc("uScene"), sceneIndex); gl.uniform1f(loc("uCross"), sceneCross);
+      gl.uniform2f(loc("uMouse"), mouse[0], mouse[1]); gl.uniform2f(loc("uPointer"), mouse[0], mouse[1]);
+      gl.uniform2f(loc("uPointerVel"), pointerVel[0], pointerVel[1]); gl.uniform1f(loc("uPointerDown"), pointerDown);
+      gl.uniform1f(loc("uPulse"), pulseAmp); gl.uniform2f(loc("uPulsePos"), pulsePos[0], pulsePos[1]);
+      gl.uniform1f(loc("uZoom"), zoom); gl.uniform1f(loc("uScrollTwist"), twist);
+      gl.uniform1f(loc("uCamOn"), cam.on ? 1 : 0); gl.uniform1f(loc("uCamMotion"), cam.motion); gl.uniform1f(loc("uCamEnergy"), cam.energy);
+      gl.uniform2f(loc("uCamCenter"), cam.cx, cam.cy); gl.uniform1f(loc("uCamMix"), slider("cammix"));
+      gl.uniform1f(loc("uScrollOn"), scrollOn ? 1 : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (document.body.dataset.ready !== "1") document.body.dataset.ready = "1";
+    }
+    drawSpectrum();
+  }
+  function boot() {
+    bindSliders(); setHud(false); loadFromUrl();
+    seedInput.addEventListener("input", function () { var parsed = L.parseSeed(seedInput.value); if (parsed.ok) applySeed(parsed, true); });
+    document.getElementById("seed-random").addEventListener("click", function () { randomizeSeed(); });
+    audioToggle.addEventListener("click", function (e) { e.preventDefault(); toggleAudio(); });
+    hudToggle.addEventListener("click", function (e) { e.preventDefault(); toggleHud(); });
+    document.getElementById("fullscreen").addEventListener("click", function (e) { e.preventDefault(); toggleFullscreen(); });
+    document.getElementById("scene-prev").addEventListener("click", function (e) { e.preventDefault(); goScene(sceneIndex - 1, true); });
+    document.getElementById("scene-next").addEventListener("click", function (e) { e.preventDefault(); goScene(sceneIndex + 1, true); });
+    sceneAutoEl.addEventListener("change", function () {
+      sceneAuto = !!sceneAutoEl.checked;
+      if (sceneAuto) sceneStartBeat = visual.beat || 0;
+      sceneCross = 0; syncSceneUi();
+    });
+    if (scrollToggle) {
+      scrollOn = !!scrollToggle.checked;
+      scrollToggle.addEventListener("change", function () { scrollOn = !!scrollToggle.checked; });
+    }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    window.addEventListener("pointerdown", onPointerDown, { capture: true });
+    window.addEventListener("pointerup", onPointerUp, { capture: true });
+    window.addEventListener("pointercancel", onPointerUp, { capture: true });
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: true });
+    canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    if (camToggle) camToggle.addEventListener("click", function (e) { e.preventDefault(); toggleCamera(); });
+    if (camFab) camFab.addEventListener("click", function (e) { e.preventDefault(); toggleCamera(); });
+    syncCamUi();
+    window.addEventListener("hashchange", function () { loadFromUrl(); });
+    window.addEventListener("resize", resize);
+    try { initGL(); setError(""); } catch (err) { setError(String(err && err.message ? err.message : err)); }
+    if (hint) hint.addEventListener("click", function (e) { e.preventDefault(); if (wantAudio) startAudio(); });
+    resize();
+    requestAnimationFrame(frame);
+    wantAudio = true;
+    armGestureUnlock();
+    startAudio();
+  }
+  boot();
+})();
+  </script>
+</body>
+</html>
