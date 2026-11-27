@@ -1,23 +1,17 @@
-# Dynamic DNS: keep labs.ghuntley.com's A record (Cloudflare, DNS-only)
-# pointed at this network's current public IPv4.
+# Dynamic DNS via DuckDNS: keeps ghuntley.duckdns.org on this network's
+# current public IP. labs.ghuntley.com is a Cloudflare CNAME (DNS only)
+# -> ghuntley.duckdns.org.
 #
-# The API token is NOT in git. Create it once, root-only:
-#   sudo sh -c 'umask 077; cat > /var/lib/secrets/cloudflare-api-token'
-# (paste the token, then Ctrl-D). The token needs Zone:DNS:Edit on ghuntley.com.
+# The token is NOT in git. Provision it once, root-only:
+#   sudo sh -c 'umask 077; cat > /var/lib/secrets/duckdns-token'
+# (paste the token from duckdns.org, then Ctrl-D).
 { ... }:
 
 {
-  systemd.tmpfiles.rules = [ "d /var/lib/secrets 0700 root root -" ];
+  imports = [ ./modules/duckdns.nix ];
 
-  services.cloudflare-dyndns = {
+  services.duckdns-updater = {
     enable = true;
-    apiTokenFile = "/var/lib/secrets/cloudflare-api-token";
-    domains = [ "labs.ghuntley.com" ];
-    proxied = false; # nginx terminates TLS itself (Let's Encrypt)
-    frequency = "*:0/2"; # every 2 minutes
+    domains = [ "ghuntley" ];
   };
-
-  # Don't fail every run before the token has been provisioned.
-  systemd.services.cloudflare-dyndns.unitConfig.ConditionPathExists =
-    "/var/lib/secrets/cloudflare-api-token";
 }
